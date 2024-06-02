@@ -1,0 +1,8 @@
+hostname: $master.hostname-$master.id
+manage_etc_hosts: true
+user: $master.hostname-$master.id
+password: $master.password
+chpasswd:
+  expire: false
+users:
+  - default

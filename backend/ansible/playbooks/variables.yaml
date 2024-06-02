@@ -1,0 +1,5 @@
+image_url: "https://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64.img"
+
+api_host: "pve"
+api_user: "root@pam"
+api_password: "{{ node_password }}"

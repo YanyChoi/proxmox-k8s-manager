@@ -1,0 +1,10 @@
+network:
+  version: 2
+  ethernets:
+    eth0:
+      dhcp4: true
+      dhcp6: true
+    ens19:
+      addresses:
+        - $network_router_ip/$network_cidr
+      gateway4: $network_router_ip

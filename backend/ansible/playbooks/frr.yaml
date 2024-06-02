@@ -1,0 +1,9 @@
+- name: Setup Router VM
+  hosts: proxmox-hosts
+  tasks:
+  - name: Create Router VM
+    shell: qm clone $template_id $router.vm.id --name $router.hn --full true
+  - name: Store cloud-init Network & User Data to Volume
+    shell: >
+      echo "$router.cloud_init" > /tmp/cloud-init-$router.vm.id
+      qm set $router.vm.id --ide1 local-lvm:cloudinit --ide2 local-lvm:cloud-init-$router.vm.id
