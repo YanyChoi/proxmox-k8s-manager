@@ -6,7 +6,7 @@ import yaml
 class ProxmoxVMTemplate(BaseModel):
     id: int
     hostname: str
-    bridge: str
+    bridges: str
     password: str
     image_url: str
     storage_target: str
@@ -14,8 +14,11 @@ class ProxmoxVMTemplate(BaseModel):
 class ProxmoxVM(BaseModel):
     id: int
     hostname: str
-    bridge: list[str]
+    bridges: list[str]
     password: str
+
+    def get_bridges(self):
+        return " ".join(self.bridges)
 
 class Config(BaseModel):
 

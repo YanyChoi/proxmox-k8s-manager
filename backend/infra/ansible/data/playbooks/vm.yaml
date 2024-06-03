@@ -8,4 +8,6 @@
       qm set $id --ide1 $storage_target:cloudinit --ide2 $storage_target:cloud-init-$id
   - name: Set VM Network Configuration
     shell: >
-      qm set $id --net0 "virtio,bridge=$bridge,firewall=1"
+      for bridge in $bridges; do
+        qm set $id --net0 "virtio,bridge=$$bridge,firewall=1"
+      done
