@@ -1,0 +1,11 @@
+- name: Setup VM
+  hosts: proxmox-hosts
+  tasks:
+  - name: Clone VM from Template
+    shell: qm clone $template.id $item.id --name $item.hostname --full true
+  - name: Store cloud-init Network & User Data to Volume
+    shell: >
+      qm set $item.id --ide1 $storage_target:cloudinit --ide2 $storage_target:cloud-init-$item.id
+  - name: Set VM Network Configuration
+    shell: >
+      qm set $item.id --net0 "virtio,bridge=$item.bridge,firewall=1"

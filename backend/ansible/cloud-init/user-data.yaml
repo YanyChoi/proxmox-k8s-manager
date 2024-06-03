@@ -1,0 +1,13 @@
+hostname: $hostname-$id
+manage_etc_hosts: true
+user: $hostname-$id
+password: $password
+chpasswd:
+  expire: false
+users:
+  - default
+write_files:
+  - path: /root/init.sh
+    permissions: '0755'
+    content: |
+      $init
