@@ -16,7 +16,7 @@ class ProxmoxVM(BaseModel):
     bridge: list[str]
     password: str
 
-class Config(object):
+class Config(BaseModel):
 
     storage_target: str
     network_cidr: str
@@ -29,6 +29,11 @@ class Config(object):
         with open(config_path, 'r') as f:
             self.data = yaml.safe_load(f)
 
-@lru_cache
+# @lru_cache
 def get_config():
     return Config()
+
+def update_config(config: Config):
+    config_path = Path(__file__).parent.parent/'config.yaml'
+    with open(config_path, 'w') as f:
+        yaml.dump(config.data, f)
