@@ -13,9 +13,12 @@ class ProxmoxVMTemplate(BaseModel):
 
 class ProxmoxVM(BaseModel):
     id: int
+    type: str
     hostname: str
     bridges: list[str]
     password: str
+    cores: int
+    memory: int
 
     def get_bridges(self):
         return " ".join(self.bridges)

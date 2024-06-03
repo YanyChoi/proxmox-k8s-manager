@@ -10,53 +10,81 @@ template:
 items:
 - id: 100
   hostname: router
+  cores: 4
+  memory: 4096
+  type: router
   bridges: 
   - vmbr0
   - vmbr1
   password: "1234"
 - id: 101
+  type: node
+  cores: 2
+  memory: 4096
   hostname: vpn
   bridges:
-  - vmbr0
   - vmbr1
   password: "1234"
 - id: 102
+  type: node
+  cores: 2
+  memory: 4096
   hostname: nfs
   bridges:
-  - vmbr0
   - vmbr1
   password: "1234"
 - id: 111
+  type: node
+  cores: 2
+  memory: 4096
   hostname: master-1
   bridges:
   - vmbr1
   password: "1234"
 - id: 112
+  type: node
+  cores: 2
+  memory: 4096
   hostname: master-2
   bridges:
   - vmbr1
   password: "1234"
 - id: 113
+  type: node
+  cores: 2
+  memory: 4096
   hostname: master-3
   bridges:
   - vmbr1
   password: "1234"
 - id: 121
+  type: node
+  cores: 2
+  memory: 4096
   hostname: worker-1
   bridges:
   - vmbr1
   password: "1234"
 - id: 122
+  type: node
+  cores: 2
+  memory: 4096
   hostname: worker-2
   bridges:
   - vmbr1
   password: "1234"
 - id: 123
+  type: node
+  cores: 2
+  memory: 4096
   hostname: worker-3
   bridges:
   - vmbr1
   password: "1234"
 - id: 124
+  type: node
+  cores: 2
+  memory: 4096
   hostname: worker-4
   bridges:
   - vmbr1

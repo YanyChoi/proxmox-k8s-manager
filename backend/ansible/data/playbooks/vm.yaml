@@ -5,9 +5,12 @@
     shell: qm clone $template_id $id --name $hostname --full true
   - name: Store cloud-init Network & User Data to Volume
     shell: >
-      qm set $id --ide1 $storage_target:cloudinit --ide2 $storage_target:cloud-init-$id
+      qm set $id --cicustom "user=local:cloud-init/user-data,network=local:cloud-init/network-$type"
   - name: Set VM Network Configuration
     shell: >
       for bridge in $bridges; do
         qm set $id --net0 "virtio,bridge=$$bridge,firewall=1"
       done
+  - name: Set VM Resources
+    shell: >
+      qm set $id --cores $cores --memory $memory

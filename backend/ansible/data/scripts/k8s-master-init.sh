@@ -35,3 +35,9 @@ sudo kubeadm init \
     --pod-network-cidr=$pod_network_cidr \
     --apiserver-advertise-address=$master_ip \
     --disable-kube-proxy \
+
+echo "[TASK 7] Copy Kube Config to User Directory & Ansible Host"
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+sudo scp -o StrictHostKeyChecking=no $HOME/.kube/config $ansible_user@$ansible_host:/home/$ansible_user/.kube/config
