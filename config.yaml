@@ -1,0 +1,62 @@
+storage_target: local-lvm
+network_cidr: 192.168.0.0/24
+template:
+  id: 100
+  hostname: ubuntu-22.04
+  bridge: vmbr0
+  password: 1234
+  image_url: https://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64.img
+items:
+- id: 100
+  hostname: router
+  bridge: 
+  - vmbr0
+  - vmbr1
+  password: 1234
+- id: 101
+  hostname: vpn
+  bridge:
+  - vmbr0
+  - vmbr1
+  password: 1234
+- id: 102
+  hostname: nfs
+  bridge:
+  - vmbr0
+  - vmbr1
+  password: 1234
+- id: 111
+  hostname: master-1
+  bridge:
+  - vmbr1
+  password: 1234
+- id: 112
+  hostname: master-2
+  bridge:
+  - vmbr1
+  password: 1234
+- id: 113
+  hostname: master-3
+  bridge:
+  - vmbr1
+  password: 1234
+- id: 121
+  hostname: worker-1
+  bridge:
+  - vmbr1
+  password: 1234
+- id: 122
+  hostname: worker-2
+  bridge:
+  - vmbr1
+  password: 1234
+- id: 123
+  hostname: worker-3
+  bridge:
+  - vmbr1
+  password: 1234
+- id: 124
+  hostname: worker-4
+  bridge:
+  - vmbr1
+  password: 1234
