@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from backend.modules.config import ProxmoxVMTemplate, ProxmoxVM
+from backend.config.config import ProxmoxVMTemplate, ProxmoxVM
 
 class GetConfigResponseDTO(BaseModel):
     

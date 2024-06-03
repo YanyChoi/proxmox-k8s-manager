@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Response
-from modules.config import Config, get_config, update_config
+from config.config import Config, get_config, update_config
 router = APIRouter(tags=["config"])
 
 @router.get("", response_model=Config)

@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, Response
 
-from modules.config import Config, get_config
-from infra.ansible.generator import PlaybookGenerator
-from infra.ansible.play import play
+from config.config import Config, get_config
+from ansible.generator import PlaybookGenerator
+from ansible.play import play
 router = APIRouter(tags=["infra"])
 
 @router.post("/vm_template")

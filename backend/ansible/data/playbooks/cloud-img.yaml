@@ -17,7 +17,7 @@
         --cpu cputype=host \
         --cores 1 \
         --memory 1024 \
-        --net0 "virtio,bridge=$bridge,firewall=1" \
+        --net0 "virtio,bridge=$bridges,firewall=1" \
         --scsihw virtio-scsi-single \
         --boot order=ide0,scsi0,net0 \
         --ide1 local-lvm:cloudinit \
