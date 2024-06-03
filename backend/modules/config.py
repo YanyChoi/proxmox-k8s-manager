@@ -22,16 +22,23 @@ class Config(BaseModel):
     network_cidr: str
     template: ProxmoxVMTemplate
     items: list[ProxmoxVM]
-
-    
-    def __init__(self):
-        config_path = Path(__file__).parent.parent/'config.yaml'
-        with open(config_path, 'r') as f:
-            self.data = yaml.safe_load(f)
+        
 
 # @lru_cache
 def get_config():
-    return Config()
+    config_path = Path(__file__).parent.parent.parent/'config.yaml'
+    with open(config_path, 'r') as f:
+        data = yaml.safe_load(f)
+        storage_target = data['storage_target']
+        network_cidr = data['network_cidr']
+        template = ProxmoxVMTemplate(**data['template'])
+        items = [ProxmoxVM(**item) for item in data['items']]
+    return Config(
+        storage_target=storage_target,
+        network_cidr=network_cidr,
+        template=template,
+        items=items
+    )
 
 def update_config(config: Config):
     config_path = Path(__file__).parent.parent/'config.yaml'

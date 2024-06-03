@@ -1,6 +1,6 @@
 import string
 from pathlib import Path
-from backend.modules.config import ProxmoxVMTemplate, ProxmoxVM
+from modules.config import ProxmoxVMTemplate, ProxmoxVM
 
 class PlaybookGenerator:
     def __init__(self):
