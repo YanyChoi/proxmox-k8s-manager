@@ -7,12 +7,12 @@ router = APIRouter(tags=["infra"])
 
 @router.post("/vm_template")
 async def create_vm_template(config: Config = Depends(get_config)) -> Response:
-    playbook_path = PlaybookGenerator().create_vm_template(config)
-    play(playbook_path)
-    return Response(status_code=200, content=playbook_path)
+    playbook_path = PlaybookGenerator().create_vm_template(config.template)
+    # play(playbook_path)
+    return playbook_path
 
 @router.post("/cluster")
 async def create_vm(config: Config = Depends(get_config)) -> Response:
     playbook_path = PlaybookGenerator().create_vm(config)
-    play(playbook_path)
-    return Response(status_code=200, content=playbook_path)
+    # play(playbook_path)
+    return playbook_path

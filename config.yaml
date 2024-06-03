@@ -6,6 +6,7 @@ template:
   bridge: vmbr0
   password: "1234"
   image_url: https://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64.img
+  storage_target: local-lvm
 items:
 - id: 100
   hostname: router

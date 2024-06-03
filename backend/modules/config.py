@@ -9,6 +9,7 @@ class ProxmoxVMTemplate(BaseModel):
     bridge: str
     password: str
     image_url: str
+    storage_target: str
 
 class ProxmoxVM(BaseModel):
     id: int
