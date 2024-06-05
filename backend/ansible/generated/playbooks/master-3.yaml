@@ -1,0 +1,16 @@
+- name: Setup VM
+  hosts: proxmox-hosts
+  tasks:
+  - name: Clone VM from Template
+    shell: qm clone 100 113 --name master-3 --full true
+  - name: Store cloud-init Network & User Data to Volume
+    shell: >
+      qm set 113 --cicustom "user=local:cloud-init/user-data,network=local:cloud-init/network-node"
+  - name: Set VM Network Configuration
+    shell: >
+      for bridge in vmbr1; do
+        qm set 113 --net0 "virtio,bridge=$bridge,firewall=1"
+      done
+  - name: Set VM Resources
+    shell: >
+      qm set 113 --cores 2 --memory 4096
