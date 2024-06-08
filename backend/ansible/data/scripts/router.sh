@@ -11,8 +11,18 @@ sudo iptables -t nat -A POSTROUTING -o ens19 -j SNAT --to-source $network_router
 sudo iptables -t nat -A POSTROUTING -o eth0 -j SNAT --to-source $public_ip
 
 echo "[TASK 3] Set Port Forwarding"
-for port in $ports; do
+
+sudo iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 80 -j DNAT --to-destination $LB_IP:80
+sudo iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 443 -j DNAT --to-destination $LB_IP:443
+sudo iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 6443 -j DNAT --to-destination $LB_IP:6443
+sudo iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 1194 -j DNAT --to-destination $VPN_IP:1194
+
+for port in $tcp_ports; do
   sudo iptables -t nat -A PREROUTING -i eth0 -p tcp --dport $port -j DNAT --to-destination $network_router_ip:$port
+done
+
+for port in $udp_ports; do
+  sudo iptables -t nat -A PREROUTING -i eth0 -p udp --dport $port -j DNAT --to-destination $network_router_ip:$port
 done
 
 echo "[TASK 2] Install FRRouting & dhcpd"
@@ -23,8 +33,7 @@ sudo tee /etc/dhcp/dhcpd.conf <<EOF
 subnet $network_cidr netmask $network_mask {
   range $network_dhcp_start $network_dhcp_end;
   option routers $network_router_ip;
-  option domain-name-servers $network_dns;
-  option domain-name "$network_domain";
+  option domain-name-servers $network_dns_primary, $network_dns_secondary;
   default-lease-time 600;
   max-lease-time 7200;
 }

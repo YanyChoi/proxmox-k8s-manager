@@ -3,51 +3,32 @@ from pydantic import BaseModel
 from functools import lru_cache
 import yaml
 
-class ProxmoxVMTemplate(BaseModel):
-    id: int
-    hostname: str
-    bridges: str
-    password: str
-    image_url: str
-    storage_target: str
-
-class ProxmoxVM(BaseModel):
-    id: int
-    type: str
-    hostname: str
-    bridges: list[str]
-    password: str
+class NodeConfig(BaseModel):
+    nodes: int
     cores: int
     memory: int
-
-    def get_bridges(self):
-        return " ".join(self.bridges)
+    storage: int
 
 class Config(BaseModel):
-
     storage_target: str
-    network_cidr: str
-    template: ProxmoxVMTemplate
-    items: list[ProxmoxVM]
-        
+    domain: str
+    network_bridge: str
+    vm_id_start: int
+    node_cidr: str
+    pod_cidr: str
+    service_cidr: str
+    master: NodeConfig
+    worker: NodeConfig
+
 
 # @lru_cache
 def get_config():
     config_path = Path(__file__).parent.parent.parent/'config.yaml'
     with open(config_path, 'r') as f:
         data = yaml.safe_load(f)
-        storage_target = data['storage_target']
-        network_cidr = data['network_cidr']
-        template = ProxmoxVMTemplate(**data['template'])
-        items = [ProxmoxVM(**item) for item in data['items']]
-    return Config(
-        storage_target=storage_target,
-        network_cidr=network_cidr,
-        template=template,
-        items=items
-    )
+    return Config(**data)
 
 def update_config(config: Config):
     config_path = Path(__file__).parent.parent/'config.yaml'
     with open(config_path, 'w') as f:
-        yaml.dump(config.data, f)
+        yaml.dump(config, f)

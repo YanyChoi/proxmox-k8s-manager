@@ -40,11 +40,11 @@ cat << EOF > /tmp/kubeadm-config.yaml
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
 kubernetesVersion: v1.30.1
-controlPlaneEndpoint: "$api_server_ip:$api_server_port"
+controlPlaneEndpoint: $K8S_API:6443
 networking:
   dnsDomain: cluster.local
-  podSubnet: "$pod_network_cidr"
-  serviceSubnet: "$service_network_cidr"
+  podSubnet: $POD_CIDR
+  serviceSubnet: $SERVICE_CIDR
 etcd:
   local:
     dataDir: /var/lib/etcd
@@ -70,9 +70,7 @@ curl -L https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | ba
 helm repo add cilium https://helm.cilium.io/
 helm install cilium cilium/cilium --version 1.15.5 \
     --namespace kube-system \
-    --set kubeProxyReplacement=true \
-    --set k8sServiceHost=$api_server_ip \
-    --set k8sServicePort=$api_server_port
+    --set kubeProxyReplacement=true
 
 echo "[TASK 8] Copy Kube Config to User Directory & Ansible Host"
 export HOME=/root
@@ -82,9 +80,9 @@ sudo chown $$(id -u):$$(id -g) $$HOME/.kube/config
 
 echo "[TASK 8] Expose Kubernetes Certificates"
 mkdir /root/certs
-CAHASH=$(openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //')
-TOKEN=$(kubeadm token list | awk '/authentication/{print $1}')
-echo "${K8S_API} ${CAHASH} ${TOKEN}" > /tmp/certs/k8s
+CAHASH=$$(openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //')
+TOKEN=$$(kubeadm token list | awk '/authentication/{print $1}')
+echo "$${K8S_API} $${CAHASH} $${TOKEN}" > /tmp/certs/k8s
 
 cp /etc/kubernetes/admin.conf /tmp/certs
 cp /etc/kubernetes/pki/etcd/ca.crt /tmp/certs
