@@ -30,5 +30,50 @@ sudo apt-get update
 sudo apt-get install -y kubelet kubeadm kubectl
 sudo apt-mark hold kubelet kubeadm kubectl
 
-echo "[TASK 5] Initialize Kubernetes Cluster"
-sudo kubeadm join $master_ip:6443 --token $token --discovery-token-ca-cert-hash $ca_hash
+
+echo "[TASK 6] Download Certificates from Master"
+count=0
+while true ; do
+    if curl -s "$K8S_API:$DEFAULT_PORT/k8s" ; then
+        DATA=$(curl -s "$K8S_API:$DEFAULT_PORT/k8s")
+        K8S_API=$(echo "$DATA" | cut -d' ' -f1)
+        CA_HASH=$(echo "$DATA" | cut -d' ' -f2)
+        TOKEN=$(echo "$DATA" | cut -d' ' -f3)
+
+        break
+    fi
+
+    count=$((count+1))
+
+    if [[ ${count} == "3600" ]]; then
+        break
+    fi
+
+    sleep 1
+done
+
+if [ -z "$K8S_API" ] || [ -z "$CAHASH" ] || [ -z "$TOKEN" ] ; then
+    echo "Some value is empty. k8s_api : $K8S_API, cahash : $CAHASH, token :$TOKEN, Quit..."
+    exit 0
+fi
+
+
+echo "[TASK 7] Initialize Kubernetes Cluster"
+
+INTERNALIP=$(ip -f inet -o addr show eth0 | cut -d\  -f 7 | cut -d/ -f 1)
+cat << EOF > /tmp/join-config.yaml
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: JoinConfiguration
+discovery:
+  bootstrapToken:
+    apiServerEndpoint: ${K8S_API}:6443
+    caCertHashes:
+    - sha256:${CAHASH}
+    token: ${TOKEN}
+    unsafeSkipCAVerification: false
+nodeRegistration:
+  name: $(hostname -s)
+  kubeletExtraArgs:
+    node-ip: "${INTERNALIP}"
+EOF
+sudo kubeadm join --config /tmp/join-config.yaml

@@ -1,5 +1,9 @@
 #!/bin/bash
 
+echo "[TASK 0] Set SSHD Configuration"
+sudo rm /etc/ssh/sshd_config.d/*
+sudo service sshd restart
+
 echo "[TASK 1] Update APT Sources"
 sudo sed -i 's|security.ubuntu.com|mirror.kakao.com|g; s|archive.ubuntu.com|mirror.kakao.com|g' /etc/apt/sources.list
 sudo apt-get update -y
@@ -31,13 +35,64 @@ sudo apt-get install -y kubelet kubeadm kubectl
 sudo apt-mark hold kubelet kubeadm kubectl
 
 echo "[TASK 6] Initialize Kubernetes Cluster"
-sudo kubeadm init \
-    --pod-network-cidr=$pod_network_cidr \
-    --apiserver-advertise-address=$master_ip \
-    --disable-kube-proxy \
 
-echo "[TASK 7] Copy Kube Config to User Directory & Ansible Host"
-mkdir -p $HOME/.kube
-sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
-sudo chown $(id -u):$(id -g) $HOME/.kube/config
-sudo scp -o StrictHostKeyChecking=no $HOME/.kube/config $ansible_user@$ansible_host:/home/$ansible_user/.kube/config
+cat << EOF > /tmp/kubeadm-config.yaml
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: ClusterConfiguration
+kubernetesVersion: v1.30.1
+controlPlaneEndpoint: "$api_server_ip:$api_server_port"
+networking:
+  dnsDomain: cluster.local
+  podSubnet: "$pod_network_cidr"
+  serviceSubnet: "$service_network_cidr"
+etcd:
+  local:
+    dataDir: /var/lib/etcd
+dns:
+  type: CoreDNS
+scheduler: {}
+---
+apiVersion: kubeadm.k8s.io/v1beta3
+kind: InitConfiguration
+localAPIEndpoint:
+  advertiseAddress:
+  bindPort: 0
+nodeRegistration:
+  name: $$(hostname -s)
+skipPhases:
+  - addon/kube-proxy
+EOF
+
+sudo kubeadm init --config /tmp/kubeadm-config.yaml
+
+echo "[TASK 7] Install Helm & Cilium"
+curl -L https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+helm repo add cilium https://helm.cilium.io/
+helm install cilium cilium/cilium --version 1.15.5 \
+    --namespace kube-system \
+    --set kubeProxyReplacement=true \
+    --set k8sServiceHost=$api_server_ip \
+    --set k8sServicePort=$api_server_port
+
+echo "[TASK 8] Copy Kube Config to User Directory & Ansible Host"
+export HOME=/root
+mkdir -p $$HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $$HOME/.kube/config
+sudo chown $$(id -u):$$(id -g) $$HOME/.kube/config
+
+echo "[TASK 8] Expose Kubernetes Certificates"
+mkdir /root/certs
+CAHASH=$(openssl x509 -pubkey -in /etc/kubernetes/pki/ca.crt | openssl rsa -pubin -outform der 2>/dev/null | openssl dgst -sha256 -hex | sed 's/^.* //')
+TOKEN=$(kubeadm token list | awk '/authentication/{print $1}')
+echo "${K8S_API} ${CAHASH} ${TOKEN}" > /tmp/certs/k8s
+
+cp /etc/kubernetes/admin.conf /tmp/certs
+cp /etc/kubernetes/pki/etcd/ca.crt /tmp/certs
+cp /etc/kubernetes/pki/etcd/ca.key /tmp/certs
+cp /etc/kubernetes/pki/ca.crt /tmp/certs
+cp /etc/kubernetes/pki/ca.key /tmp/certs
+cp /etc/kubernetes/pki/front-proxy-ca.crt /tmp/certs
+cp /etc/kubernetes/pki/front-proxy-ca.key /tmp/certs
+cp /etc/kubernetes/pki/sa.key /tmp/certs
+cp /etc/kubernetes/pki/sa.pub /tmp/certs
+nohup python3 -m http.server 20080 --directory /tmp/certs &

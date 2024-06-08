@@ -30,5 +30,63 @@ sudo apt-get update
 sudo apt-get install -y kubelet kubeadm kubectl
 sudo apt-mark hold kubelet kubeadm kubectl
 
-echo "[TASK 6] Initialize Kubernetes Cluster"
-sudo kubeadm join $master_ip:6443 --token $token --discovery-token-ca-cert-hash $ca_hash --control-plane --certificate-key $certificate_key
+echo "[TASK 6] Download Certificates from Master"
+count=0
+while true ; do
+    if curl -s "$K8S_API:$DEFAULT_PORT/k8s" ; then
+        DATA=$(curl -s "$K8S_API:$DEFAULT_PORT/k8s")
+        K8S_API=$(echo "$DATA" | cut -d' ' -f1)
+        CAHASH=$(echo "$DATA" | cut -d' ' -f2)
+        TOKEN=$(echo "$DATA" | cut -d' ' -f3)
+
+        break
+    fi
+
+    count=$((count+1))
+
+    if [[ ${count} == "3600" ]]; then
+        break
+    fi
+
+    sleep 1
+done
+
+if [ -z "$K8S_API" ] || [ -z "$CAHASH" ] || [ -z "$TOKEN" ] ; then
+    echo "Some value is empty. k8s_api : $K8S_API, cahash : $CAHASH, token :$TOKEN, Quit..."
+    exit 0
+fi
+
+mkdir -p /etc/kubernetes/pki/etcd/
+curl -o /etc/kubernetes/pki/etcd/ca.crt "$K8S_API:$DEFAULT_PORT/etcd-ca.crt"
+curl -o /etc/kubernetes/pki/etcd/ca.key "$K8S_API:$DEFAULT_PORT/etcd-ca.key"
+curl -o /etc/kubernetes/pki/ca.crt "$K8S_API:$DEFAULT_PORT/ca.crt"
+curl -o /etc/kubernetes/pki/ca.key "$K8S_API:$DEFAULT_PORT/ca.key"
+curl -o /etc/kubernetes/pki/front-proxy-ca.crt "$K8S_API:$DEFAULT_PORT/front-proxy-ca.crt"
+curl -o /etc/kubernetes/pki/front-proxy-ca.key "$K8S_API:$DEFAULT_PORT/front-proxy-ca.key"
+curl -o /etc/kubernetes/pki/sa.key "$K8S_API:$DEFAULT_PORT/sa.key"
+curl -o /etc/kubernetes/pki/sa.pub "$K8S_API:$DEFAULT_PORT/sa.pub"
+
+
+echo "[TASK 7] Initialize Kubernetes Cluster"
+
+INTERNALIP=$(ip -f inet -o addr show eth0 | cut -d\  -f 7 | cut -d/ -f 1)
+cat << EOF > /tmp/join-config.yaml
+apiVersion: kubeadm.k8s.io/v1beta2
+kind: JoinConfiguration
+controlPlane:
+  localAPIEndpoint:
+    advertiseAddress: ""
+    bindPort: 0
+discovery:
+  bootstrapToken:
+    apiServerEndpoint: ${K8S_API}:6443
+    caCertHashes:
+    - sha256:${CAHASH}
+    token: ${TOKEN}
+    unsafeSkipCAVerification: false
+nodeRegistration:
+  name: $(hostname -s)
+  kubeletExtraArgs:
+    node-ip: "${INTERNALIP}"
+EOF
+kubeadm join --config /tmp/join-config.yaml
