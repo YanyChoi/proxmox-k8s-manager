@@ -16,10 +16,10 @@ class K8sInitConfig(BaseModel):
     @classmethod
     def from_config(self, config: Config) -> 'K8sInitConfig':
         return K8sInitConfig(
-            K8S_API=get_ip(config.node_cidr, "K8S_API"),
-            POD_CIDR=config.pod_cidr,
-            SERVICE_CIDR=config.service_cidr,
-            DOMAIN=config.domain
+            K8S_API=get_ip(config.network.node_cidr, "K8S_API"),
+            POD_CIDR=config.network.pod_cidr,
+            SERVICE_CIDR=config.network.service_cidr,
+            DOMAIN=config.network.domain
         )
 class K8sJoinConfig(BaseModel):
     K8S_API: str
@@ -31,10 +31,10 @@ class K8sJoinConfig(BaseModel):
             CORES=config.worker.cores,
             MEMORY=config.worker.memory,
             STORAGE=config.worker.storage,
-            K8S_API=get_ip(config.node_cidr, "K8S_API"),
-            POD_CIDR=config.pod_cidr,
-            SERVICE_CIDR=config.service_cidr,
-            DOMAIN=config.domain
+            K8S_API=get_ip(config.network.node_cidr, "K8S_API"),
+            POD_CIDR=config.network.pod_cidr,
+            SERVICE_CIDR=config.network.service_cidr,
+            DOMAIN=config.network.domain
         )
 
 class RouterConfig(BaseModel):
@@ -54,13 +54,13 @@ class RouterConfig(BaseModel):
         public_ip = requests.get('https://ifconfig.me').text
         dns_servers = dns.resolver.Resolver().nameservers
         return RouterConfig(
-            ROUTER_IP=get_ip(config.node_cidr, "ROUTER"),
+            ROUTER_IP=get_ip(config.network.node_cidr, "ROUTER"),
             PUBLIC_IP=public_ip,
-            LB_IP=get_ip(config.node_cidr, "LB"),
-            NETWORK_CIDR=config.node_cidr,
-            NETWORK_MASK=str(ipaddress.IPv4Network(config.node_cidr).netmask),
-            NETWORK_DHCP_START=str(ipaddress.IPv4Network(config.node_cidr).network_address + 2),
-            NETWORK_DHCP_END=str(ipaddress.IPv4Network(config.node_cidr).network_address + 254),
+            LB_IP=get_ip(config.network.node_cidr, "LB"),
+            NETWORK_CIDR=config.network.node_cidr,
+            NETWORK_MASK=str(ipaddress.IPv4Network(config.network.node_cidr).netmask),
+            NETWORK_DHCP_START=str(ipaddress.IPv4Network(config.network.node_cidr).network_address + 2),
+            NETWORK_DHCP_END=str(ipaddress.IPv4Network(config.network.node_cidr).network_address + 254),
             NETWORK_DNS_PRIMARY=dns_servers[0],
             NETWORK_DNS_SECONDARY=dns_servers[1]
         )
@@ -72,8 +72,8 @@ class NFSConfig(BaseModel):
     @classmethod
     def from_config(self, config: Config) -> 'NFSConfig':
         return RouterConfig(
-            ROUTER_IP=get_ip(config.node_cidr, "ROUTER"),
-            NETWORK_CIDR=config.node_cidr
+            ROUTER_IP=get_ip(config.network.node_cidr, "ROUTER"),
+            NETWORK_CIDR=config.network.node_cidr
         )
 
 def get_ip(cidr: str, type: str) -> str:
@@ -111,4 +111,3 @@ def write_script(config: Config, type: str) -> str:
     with open(template_path, 'r') as f:
         template = string.Template(f.read())
         return template.substitute(template_config.__dict__)
-

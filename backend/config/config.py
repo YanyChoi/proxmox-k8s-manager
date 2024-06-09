@@ -3,6 +3,18 @@ from pydantic import BaseModel
 from functools import lru_cache
 import yaml
 
+class NetworkConfig(BaseModel):
+    domain: str
+    node_cidr: str
+    pod_cidr: str
+    service_cidr: str
+
+class ProxmoxConfig(BaseModel):
+    storage_target: str
+    network_bridge: str
+    vm_template_id: str
+    vm_id_start: int
+
 class NodeConfig(BaseModel):
     nodes: int
     cores: int
@@ -10,13 +22,8 @@ class NodeConfig(BaseModel):
     storage: int
 
 class Config(BaseModel):
-    storage_target: str
-    domain: str
-    network_bridge: str
-    vm_id_start: int
-    node_cidr: str
-    pod_cidr: str
-    service_cidr: str
+    network: NetworkConfig
+    proxmox: ProxmoxConfig
     master: NodeConfig
     worker: NodeConfig
 
