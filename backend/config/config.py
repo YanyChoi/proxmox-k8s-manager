@@ -12,7 +12,8 @@ class NetworkConfig(BaseModel):
 class ProxmoxConfig(BaseModel):
     storage_target: str
     network_bridge: str
-    vm_template_id: str
+    password: str
+    vm_template_id: int
     vm_id_start: int
 
 class NodeConfig(BaseModel):

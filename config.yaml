@@ -4,10 +4,11 @@ network:
   pod_cidr: 10.0.0.0/16
   service_cidr: 172.16.0.0/20
 proxmox:
-  vm_template_id: 10000
-  vm_id_start: 10001
   storage_target: local-lvm
   network_bridge: vmbr4
+  password: "1234"
+  vm_template_id: 10000
+  vm_id_start: 10001
 master:
   nodes: 3
   cores: 4 # number of cores
