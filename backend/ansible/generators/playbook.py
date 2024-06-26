@@ -86,6 +86,7 @@ class ProxmoxVMConfig(BaseModel):
     
 
 def write_playbook(config: Config, id: int, type: str) -> str:
+
     if type == "TEMPLATE":
         template_config = ProxmoxVMTemplateConfig.from_config(config)
         template_path = Path(__file__).parent.parent/'data/playbooks/cloud-img.yaml'

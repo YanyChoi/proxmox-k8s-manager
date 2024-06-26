@@ -75,6 +75,9 @@ class NFSConfig(BaseModel):
             ROUTER_IP=get_ip(config.network.node_cidr, "ROUTER"),
             NETWORK_CIDR=config.network.node_cidr
         )
+    
+class VPNConfig(BaseModel):
+    
 
 def get_ip(cidr: str, type: str) -> str:
     CIDR = ipaddress.IPv4Network(cidr)
@@ -95,6 +98,9 @@ def write_script(config: Config, type: str) -> str:
     if type == "ROUTER":
         template_config = RouterConfig.from_config(config)
         template_path = Path(__file__).parent/'scripts/router.sh'
+    if type == "VPN":
+        template_config = RouterConfig.from_config(config)
+        template_path = Path(__file__).parent/'scripts/vpn.sh'
     if type == "NFS":
         template_config = NFSConfig.from_config(config)
         template_path = Path(__file__).parent/'scripts/nfs.sh'
