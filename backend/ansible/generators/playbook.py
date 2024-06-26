@@ -56,6 +56,11 @@ class ProxmoxVMConfig(BaseModel):
             memory = 2048
             storage = 8
             user_data_path = user_data_path/'user-data-vpn.yaml'
+        if type == "NFS":
+            cores = 2
+            memory = 2048
+            storage = 32
+            user_data_path = user_data_path/'user-data-nfs.yaml'
         if type == "MASTER_INIT":
             cores = config.master.cores
             memory = config.master.memory
