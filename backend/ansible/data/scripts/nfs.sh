@@ -12,7 +12,7 @@ sudo mkdir -p /mnt/nfs
 sudo chown nobody:nogroup /mnt/nfs
 sudo chmod 777 /mnt/nfs
 sudo tee /etc/exports <<EOF
-/mnt/nfs $network_router_ip/$network_cidr(rw,sync,no_subtree_check,no_root_squash)
+/mnt/nfs $NETWORK_ROUTER_IP/$NETWORK_CIDR(rw,sync,no_subtree_check,no_root_squash)
 EOF
 
 echo "[TASK 4] Restart NFS Server"

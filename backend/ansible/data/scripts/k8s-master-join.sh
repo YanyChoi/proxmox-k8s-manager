@@ -33,38 +33,38 @@ sudo apt-mark hold kubelet kubeadm kubectl
 echo "[TASK 6] Download Certificates from Master"
 count=0
 while true ; do
-    if curl -s "$K8S_API:$DEFAULT_PORT/k8s" ; then
-        DATA=$(curl -s "$K8S_API:$DEFAULT_PORT/k8s")
-        K8S_API=$(echo "$DATA" | cut -d' ' -f1)
-        CAHASH=$(echo "$DATA" | cut -d' ' -f2)
-        TOKEN=$(echo "$DATA" | cut -d' ' -f3)
+    if curl -s "$K8S_API:20080/k8s" ; then
+        DATA=$(curl -s "$K8S_API:20080/k8s")
+        K8S_API=$(echo "$$DATA" | cut -d' ' -f1)
+        CAHASH=$(echo "$$DATA" | cut -d' ' -f2)
+        TOKEN=$(echo "$$DATA" | cut -d' ' -f3)
 
         break
     fi
 
-    count=$((count+1))
+    count=$$((count+1))
 
-    if [[ ${count} == "3600" ]]; then
+    if [[ $${count} == "3600" ]]; then
         break
     fi
 
     sleep 1
 done
 
-if [ -z "$K8S_API" ] || [ -z "$CAHASH" ] || [ -z "$TOKEN" ] ; then
-    echo "Some value is empty. k8s_api : $K8S_API, cahash : $CAHASH, token :$TOKEN, Quit..."
+if [ -z "$K8S_API" ] || [ -z "$$CAHASH" ] || [ -z "$$TOKEN" ] ; then
+    echo "Some value is empty. k8s_api : $K8S_API, cahash : $$CAHASH, token :$$TOKEN, Quit..."
     exit 0
 fi
 
 mkdir -p /etc/kubernetes/pki/etcd/
-curl -o /etc/kubernetes/pki/etcd/ca.crt "$K8S_API:$DEFAULT_PORT/etcd-ca.crt"
-curl -o /etc/kubernetes/pki/etcd/ca.key "$K8S_API:$DEFAULT_PORT/etcd-ca.key"
-curl -o /etc/kubernetes/pki/ca.crt "$K8S_API:$DEFAULT_PORT/ca.crt"
-curl -o /etc/kubernetes/pki/ca.key "$K8S_API:$DEFAULT_PORT/ca.key"
-curl -o /etc/kubernetes/pki/front-proxy-ca.crt "$K8S_API:$DEFAULT_PORT/front-proxy-ca.crt"
-curl -o /etc/kubernetes/pki/front-proxy-ca.key "$K8S_API:$DEFAULT_PORT/front-proxy-ca.key"
-curl -o /etc/kubernetes/pki/sa.key "$K8S_API:$DEFAULT_PORT/sa.key"
-curl -o /etc/kubernetes/pki/sa.pub "$K8S_API:$DEFAULT_PORT/sa.pub"
+curl -o /etc/kubernetes/pki/etcd/ca.crt "$K8S_API:20080/etcd-ca.crt"
+curl -o /etc/kubernetes/pki/etcd/ca.key "$K8S_API:20080/etcd-ca.key"
+curl -o /etc/kubernetes/pki/ca.crt "$K8S_API:20080/ca.crt"
+curl -o /etc/kubernetes/pki/ca.key "$K8S_API:20080/ca.key"
+curl -o /etc/kubernetes/pki/front-proxy-ca.crt "$K8S_API:20080/front-proxy-ca.crt"
+curl -o /etc/kubernetes/pki/front-proxy-ca.key "$K8S_API:20080/front-proxy-ca.key"
+curl -o /etc/kubernetes/pki/sa.key "$K8S_API:20080/sa.key"
+curl -o /etc/kubernetes/pki/sa.pub "$K8S_API:20080/sa.pub"
 
 
 echo "[TASK 7] Initialize Kubernetes Cluster"
