@@ -22,11 +22,15 @@ class NodeConfig(BaseModel):
     memory: int
     storage: int
 
+class AuthConfig(BaseModel):
+    password: str
+
 class Config(BaseModel):
     network: NetworkConfig
     proxmox: ProxmoxConfig
     master: NodeConfig
     worker: NodeConfig
+    auth: AuthConfig
 
 
 # @lru_cache

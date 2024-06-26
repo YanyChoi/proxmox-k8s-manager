@@ -38,45 +38,39 @@ class ProxmoxVMConfig(BaseModel):
     @classmethod
     def from_config(self, config: Config, id: int, type: str) -> 'ProxmoxVMConfig':
         bridges = [config.proxmox.network_bridge]
-        user_data_path = Path(__file__).parent.parent/'generated/cloud-img'
-        network_data_path = Path(__file__).parent.parent/'generated/cloud-img'
+        user_data_path = Path(__file__).parent.parent/'generated/cloud-init'
+        network_data_path = Path(__file__).parent.parent/'data/cloud-init/network.yaml'
         if type == "ROUTER":
             bridges.append("vmbr0")
             cores = 2
             memory = 2048
             storage = 8
             user_data_path = user_data_path/'user-data-router.yaml'
-            network_data_path = network_data_path/'network-data-router.yaml'
         if type == "LB":
             cores = 2
             memory = 2048
             storage = 8
             user_data_path = user_data_path/'user-data-lb.yaml'
-            network_data_path = network_data_path/'network-data-lb.yaml'
         if type == "VPN":
             cores = 2
             memory = 2048
             storage = 8
             user_data_path = user_data_path/'user-data-vpn.yaml'
-            network_data_path = network_data_path/'network-data-vpn.yaml'
         if type == "MASTER_INIT":
             cores = config.master.cores
             memory = config.master.memory
             storage = config.master.storage
             user_data_path = user_data_path/'user-data-master-init.yaml'
-            network_data_path = network_data_path/'network-data-master.yaml'
         if type == "MASTER_JOIN":
             cores = config.master.cores
             memory = config.master.memory
             storage = config.master.storage
             user_data_path = user_data_path/'user-data-master-join.yaml'
-            network_data_path = network_data_path/'network-data-master.yaml'
         if type == "WORKER":
             cores = config.worker.cores
             memory = config.worker.memory
             storage = config.worker.storage
             user_data_path = user_data_path/'user-data-worker.yaml'
-            network_data_path = network_data_path/'network-data-worker.yaml'
         return ProxmoxVMConfig(
             TEMPLATE_ID=config.proxmox.vm_template_id,
             ID=id,

@@ -19,3 +19,5 @@ worker:
   cores: 4
   memory: 4096
   storage: 50
+auth:
+  password: '1234'

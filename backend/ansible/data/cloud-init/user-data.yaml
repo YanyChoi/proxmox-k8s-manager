@@ -1,7 +1,7 @@
-hostname: $hostname-$id
+hostname: $HOSTNAME
 manage_etc_hosts: true
-user: $hostname-$id
-password: $password
+user: $HOSTNAME
+password: $PASSWORD
 chpasswd:
   expire: false
 users:
@@ -10,4 +10,4 @@ write_files:
   - path: /root/init.sh
     permissions: '0755'
     content: |
-      $init
+      $INIT_SCRIPT

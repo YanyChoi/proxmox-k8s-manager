@@ -20,16 +20,6 @@ sudo iptables -t nat -A PREROUTING -i eth0 -p tcp --dport 1194 -j DNAT --to-dest
 echo "[TASK 2] Install FRRouting & dhcpd"
 sudo apt-get install -y frr isc-dhcp-server
 
-echo "[TASK 3] Configure DHCP Server"
-sudo tee /etc/dhcp/dhcpd.conf <<EOF
-subnet $NETWORK_CIDR netmask $NETWORK_MASK {
-  range $NETWORK_DHCP_START $NETWORK_DHCP_END;
-  option routers $NETWORK_ROUTER_IP;
-  option domain-name-servers $NETWORK_DNS_PRIMARY, $NETWORK_DNS_SECONDARY;
-  default-lease-time 600;
-  max-lease-time 7200;
-}
-
 echo "[TASK 3] Configure FRRouting"
 sudo sed -i 's|zebra=no|zebra=yes|g; s|ospfd=no|ospfd=yes|g; s|bgpd=no|bgpd=yes|g' /etc/frr/daemons
 sudo tee /etc/frr/frr.conf <<EOF
@@ -59,3 +49,14 @@ EOF
 
 echo "[TASK 4] Restart FRRouting"
 sudo systemctl restart frr
+
+echo "[TASK 5] Configure DHCP Server"
+sudo tee /etc/dhcp/dhcpd.conf <<EOF
+subnet $NETWORK_CIDR netmask $NETWORK_MASK {
+  range $NETWORK_DHCP_START $NETWORK_DHCP_END;
+  option routers $NETWORK_ROUTER_IP;
+  option domain-name-servers $NETWORK_DNS_PRIMARY, $NETWORK_DNS_SECONDARY;
+  default-lease-time 600;
+  max-lease-time 7200;
+}
+EOF
