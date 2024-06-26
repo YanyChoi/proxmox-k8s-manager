@@ -3,7 +3,7 @@ from config.config import Config
 from pathlib import Path
 import string
 
-from generators.scripts import write_script
+from ansible.generators.scripts import write_script
 
 class UserDataConfig(BaseModel):
     HOSTNAME: str

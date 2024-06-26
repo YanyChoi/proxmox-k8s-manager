@@ -1,28 +1,14 @@
 from fastapi import APIRouter, Depends, Response
 
 from config.config import Config, get_config
-from ansible.generators.playbook import create_vm_template, create_vm
-from ansible.play import play
+from ansible.play import generate, play
 router = APIRouter(tags=["infra"])
 
-@router.post("/vm_template/plan")
-async def plan_vm_template(config: Config = Depends(get_config)) -> Response:
-    playbook_path = create_vm_template(config.template)
-    return playbook_path
+@router.post("/generate")
+async def plan(config: Config = Depends(get_config)) -> Response:
+    generate(config)
 
-@router.post("/cluster/plan")
-async def plan_vm(config: Config = Depends(get_config)) -> Response:
-    playbook_path = create_vm(config)
-    return playbook_path
-
-@router.post("/vm_template/apply")
-async def apply_vm_template(config: Config = Depends(get_config)) -> Response:
-    playbook_path = create_vm_template(config.template)
-    play(playbook_path)
-    return Response(status_code=200)
-
-@router.post("/cluster/apply")
-async def apply_vm(config: Config = Depends(get_config)) -> Response:
-    playbook_path = create_vm(config)
-    play(playbook_path)
+@router.post("/apply")
+async def apply() -> Response:
+    play()
     return Response(status_code=200)

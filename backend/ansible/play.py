@@ -1,8 +1,8 @@
 import ansible_runner
 
 from config.config import Config
-from generators.playbook import write_playbook
-from generators.cloud_init import generate_cloud_init
+from ansible.generators.playbook import write_playbook
+from ansible.generators.cloud_init import generate_cloud_init
 
 def generate(config: Config):
     print("Generating...")
