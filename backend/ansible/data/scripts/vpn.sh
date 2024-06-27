@@ -16,7 +16,7 @@ cd /etc/openvpn/server/easy-rsa
 echo "[TASK 4] Create OpenVPN Server Keys"
 ./easyrsa --batch gen-dh
 ./easyrsa --batch --days=3650 build-server-full server nopass
-./easyrsa --batch --days=3650 build-client-full "$client" nopass
+./easyrsa --batch --days=3650 build-client-full client nopass
 ./easyrsa --batch --days=3650 gen-crl
 sudo openvpn --genkey secret /etc/openvpn/server/ta.key
 sudo cp pki/dh.pem pki/ca.crt pki/issued/server.crt pki/private/server.key pki/crl.pem /etc/openvpn/server/
@@ -34,7 +34,7 @@ dh dh.pem
 auth SHA512
 tls-crypt ta.key
 topology subnet
-server $VPN_CIDR $VPN_NETMASK
+server $IP_PREFIX $IP_NETMASK
 push "redirect-gateway def1 bypass-dhcp"
 ifconfig-pool-persist ipp.txt
 push "dhcp-option DNS $DNS_PRIMARY"
@@ -52,7 +52,7 @@ EOF
 echo "[TASK 6] Enable IP Forwarding"
 sudo sed -i 's|#net.ipv4.ip_forward=1|net.ipv4.ip_forward=1|g' /etc/sysctl.conf
 sudo sysctl -p
-sudo iptables -t nat -A POSTROUTING -s $NETWORK_CIDR -o eth0 -j MASQUERADE
+sudo iptables -t nat -A POSTROUTING -s $VPN_CIDR -o eth0 -j MASQUERADE
 
 echo "[TASK 7] Start OpenVPN Server"
 sudo systemctl start openvpn-server@server

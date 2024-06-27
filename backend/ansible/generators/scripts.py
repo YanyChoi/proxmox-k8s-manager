@@ -77,7 +77,18 @@ class NFSConfig(BaseModel):
         )
     
 class VPNConfig(BaseModel):
-    
+    VPN_CIDR: str
+    IP_PREFIX: str
+    IP_NETMASK: str
+    DNS_PRIMARY: str
+    DNS_SECONDARY: str
+
+    def __init__(self, config: Config):
+        self.VPN_CIDR = config.network.vpn_cidr
+        self.IP_PREFIX = str(ipaddress.IPv4Network(config.network.vpn_cidr).network_address)
+        self.IP_NETMASK = str(ipaddress.IPv4Network(config.network.vpn_cidr).netmask)
+        self.DNS_PRIMARY = config.network.domain
+        self.DNS_SECONDARY = config.network.domain
 
 def get_ip(cidr: str, type: str) -> str:
     CIDR = ipaddress.IPv4Network(cidr)
@@ -99,7 +110,7 @@ def write_script(config: Config, type: str) -> str:
         template_config = RouterConfig.from_config(config)
         template_path = Path(__file__).parent/'scripts/router.sh'
     if type == "VPN":
-        template_config = RouterConfig.from_config(config)
+        template_config = VPNConfig(config)
         template_path = Path(__file__).parent/'scripts/vpn.sh'
     if type == "NFS":
         template_config = NFSConfig.from_config(config)
