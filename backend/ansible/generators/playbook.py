@@ -12,16 +12,13 @@ class ProxmoxVMTemplateConfig(BaseModel):
     PASSWORD: str
     STORAGE_TARGET: str
 
-    @classmethod
-    def from_config(self, config: Config) -> 'ProxmoxVMTemplateConfig':
-        return ProxmoxVMTemplateConfig(
-            ID=config.proxmox.vm_template_id,
-            IMAGE_URL="https://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64.img",
-            BRIDGE="vmbr0",
-            USERNAME="ubuntu",
-            PASSWORD=config.proxmox.password,
-            STORAGE_TARGET=config.proxmox.storage_target
-        )
+    def __init__(self, config: Config):
+        self.ID=config.proxmox.vm_template_id
+        self.IMAGE_URL="https://cloud-images.ubuntu.com/minimal/releases/jammy/release/ubuntu-22.04-minimal-cloudimg-amd64.img"
+        self.BRIDGE="vmbr0"
+        self.USERNAME="ubuntu"
+        self.PASSWORD=config.proxmox.password
+        self.STORAGE_TARGET=config.proxmox.storage_target
 
 class ProxmoxVMConfig(BaseModel):
     TEMPLATE_ID: str
@@ -35,8 +32,7 @@ class ProxmoxVMConfig(BaseModel):
     USER_DATA_PATH: str
     NETWORK_DATA_PATH: str
 
-    @classmethod
-    def from_config(self, config: Config, id: int, type: str) -> 'ProxmoxVMConfig':
+    def __init__(self, config: Config, id: int, type: str):
         bridges = [config.proxmox.network_bridge]
         user_data_path = Path(__file__).parent.parent/'generated/cloud-init'
         network_data_path = Path(__file__).parent.parent/'data/cloud-init/network.yaml'
@@ -76,18 +72,17 @@ class ProxmoxVMConfig(BaseModel):
             memory = config.worker.memory
             storage = config.worker.storage
             user_data_path = user_data_path/'user-data-worker.yaml'
-        return ProxmoxVMConfig(
-            TEMPLATE_ID=config.proxmox.vm_template_id,
-            ID=id,
-            HOSTNAME=f"{type}-{id}",
-            TYPE=type,
-            BRIDGES=bridges,
-            CORES=cores,
-            MEMORY=memory,
-            STORAGE=storage,
-            USER_DATA_PATH=user_data_path,
-            NETWORK_DATA_PATH=network_data_path
-        )
+
+        self.TEMPLATE_ID=config.proxmox.vm_template_id
+        self.ID=id
+        self.HOSTNAME=f"{type}-{id}"
+        self.TYPE=type
+        self.BRIDGES=bridges
+        self.CORES=cores
+        self.MEMORY=memory
+        self.STORAGE=storage
+        self.USER_DATA_PATH=user_data_path
+        self.NETWORK_DATA_PATH=network_data_path
     
 
 def write_playbook(config: Config, id: int, type: str) -> str:

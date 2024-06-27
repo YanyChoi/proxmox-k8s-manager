@@ -13,29 +13,23 @@ class K8sInitConfig(BaseModel):
     SERVICE_CIDR: str
     DOMAIN: str
 
-    @classmethod
-    def from_config(self, config: Config) -> 'K8sInitConfig':
-        return K8sInitConfig(
-            K8S_API=get_ip(config.network.node_cidr, "K8S_API"),
-            POD_CIDR=config.network.pod_cidr,
-            SERVICE_CIDR=config.network.service_cidr,
-            DOMAIN=config.network.domain
-        )
+    def __init__(self, config: Config):
+        self.K8S_API=get_ip(config.network.node_cidr, "K8S_API")
+        self.POD_CIDR=config.network.pod_cidr
+        self.SERVICE_CIDR=config.network.service_cidr
+        self.DOMAIN=config.network.domain
 class K8sJoinConfig(BaseModel):
     K8S_API: str
 
-    @classmethod
-    def from_config(self, config: Config) -> 'K8sJoinConfig':
-        return K8sJoinConfig(
-            NODES=config.worker.nodes,
-            CORES=config.worker.cores,
-            MEMORY=config.worker.memory,
-            STORAGE=config.worker.storage,
-            K8S_API=get_ip(config.network.node_cidr, "K8S_API"),
-            POD_CIDR=config.network.pod_cidr,
-            SERVICE_CIDR=config.network.service_cidr,
-            DOMAIN=config.network.domain
-        )
+    def __init__(self, config: Config):
+        self.NODES=config.worker.nodes
+        self.CORES=config.worker.cores
+        self.MEMORY=config.worker.memory
+        self.STORAGE=config.worker.storage
+        self.K8S_API=get_ip(config.network.node_cidr, "K8S_API")
+        self.POD_CIDR=config.network.pod_cidr
+        self.SERVICE_CIDR=config.network.service_cidr
+        self.DOMAIN=config.network.domain
 
 class RouterConfig(BaseModel):
     ROUTER_IP: str
@@ -49,32 +43,28 @@ class RouterConfig(BaseModel):
     NETWORK_DNS_PRIMARY: str
     NETWORK_DNS_SECONDARY: str
 
-    @classmethod
-    def from_config(self, config: Config) -> 'RouterConfig':
+    def __init__(self, config: Config):
         public_ip = requests.get('https://ifconfig.me').text
         dns_servers = dns.resolver.Resolver().nameservers
-        return RouterConfig(
-            ROUTER_IP=get_ip(config.network.node_cidr, "ROUTER"),
-            PUBLIC_IP=public_ip,
-            LB_IP=get_ip(config.network.node_cidr, "LB"),
-            NETWORK_CIDR=config.network.node_cidr,
-            NETWORK_MASK=str(ipaddress.IPv4Network(config.network.node_cidr).netmask),
-            NETWORK_DHCP_START=str(ipaddress.IPv4Network(config.network.node_cidr).network_address + 2),
-            NETWORK_DHCP_END=str(ipaddress.IPv4Network(config.network.node_cidr).network_address + 254),
-            NETWORK_DNS_PRIMARY=dns_servers[0],
-            NETWORK_DNS_SECONDARY=dns_servers[1]
-        )
+
+        self.ROUTER_IP=get_ip(config.network.node_cidr, "ROUTER")
+        self.PUBLIC_IP=public_ip
+        self.LB_IP=get_ip(config.network.node_cidr, "LB")
+        self.NETWORK_CIDR=config.network.node_cidr
+        self.NETWORK_MASK=str(ipaddress.IPv4Network(config.network.node_cidr).netmask)
+        self.NETWORK_DHCP_START=str(ipaddress.IPv4Network(config.network.node_cidr).network_address + 2)
+        self.NETWORK_DHCP_END=str(ipaddress.IPv4Network(config.network.node_cidr).network_address + 254)
+        self.NETWORK_DNS_PRIMARY=dns_servers[0]
+        self.NETWORK_DNS_SECONDARY=dns_servers[1]
+
 
 class NFSConfig(BaseModel):
     ROUTER_IP: str
     NETWORK_CIDR: str
     
-    @classmethod
-    def from_config(self, config: Config) -> 'NFSConfig':
-        return RouterConfig(
-            ROUTER_IP=get_ip(config.network.node_cidr, "ROUTER"),
-            NETWORK_CIDR=config.network.node_cidr
-        )
+    def __init__(self, config: Config):
+        self.ROUTER_IP = get_ip(config.network.node_cidr, "ROUTER")
+        self.NETWORK_CIDR = config.network.node_cidr
     
 class VPNConfig(BaseModel):
     VPN_CIDR: str
@@ -107,22 +97,22 @@ def get_ip(cidr: str, type: str) -> str:
     
 def write_script(config: Config, type: str) -> str:
     if type == "ROUTER":
-        template_config = RouterConfig.from_config(config)
+        template_config = RouterConfig(config)
         template_path = Path(__file__).parent/'scripts/router.sh'
     if type == "VPN":
         template_config = VPNConfig(config)
         template_path = Path(__file__).parent/'scripts/vpn.sh'
     if type == "NFS":
-        template_config = NFSConfig.from_config(config)
+        template_config = NFSConfig(config)
         template_path = Path(__file__).parent/'scripts/nfs.sh'
     if type == "MASTER_INIT":
-        template_config = K8sInitConfig.from_config(config)
+        template_config = K8sInitConfig(config)
         template_path = Path(__file__).parent/'scripts/k8s-master-init.sh'
     if type == "MASTER_JOIN":
-        template_config = K8sJoinConfig.from_config(config)
+        template_config = K8sJoinConfig(config)
         template_path = Path(__file__).parent/'scripts/k8s-master-join.sh'
     if type == "WORKER":
-        template_config = K8sJoinConfig.from_config(config)
+        template_config = K8sJoinConfig(config)
         template_path = Path(__file__).parent/'scripts/k8s-worker.sh'
     
     with open(template_path, 'r') as f:
