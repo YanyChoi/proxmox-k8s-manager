@@ -5,13 +5,13 @@ const PageNavbar = () => {
     return (
         <Navbar shouldHideOnScroll isBordered>
             <NavbarBrand>
-                <p className="font-bold text-inherit">Proxmox Manager</p>
+                <Link className="text-xl font-bold text-inherit" to={"/"}>Proxmox Manager</Link>
             </NavbarBrand>
             <NavbarContent>
-                <Link color="foreground" to={"/"}>Home</Link>
-                <Link color="foreground" to={"/cluster"}>Cluster</Link>
-                <Link color="foreground" to={"/monitor"}>Monitor</Link>
-                <Link color="foreground" to={"/settings"}>Settings</Link>
+                <Link className="text-inherit" to={"/"}>Home</Link>
+                <Link className="text-inherit" to={"/cluster"}>Cluster</Link>
+                <Link className="text-inherit" to={"/monitor"}>Monitor</Link>
+                <Link className="text-inherit" to={"/settings"}>Settings</Link>
             </NavbarContent>
         </Navbar>
     )
