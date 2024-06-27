@@ -3,6 +3,7 @@ network:
   node_cidr: 192.168.10.0/24
   pod_cidr: 10.0.0.0/16
   service_cidr: 172.16.0.0/20
+  vpn_cidr: 172.201.0.0/24
 proxmox:
   storage_target: local-lvm
   network_bridge: vmbr4

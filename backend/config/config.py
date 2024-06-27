@@ -8,6 +8,7 @@ class NetworkConfig(BaseModel):
     node_cidr: str
     pod_cidr: str
     service_cidr: str
+    vpn_cidr: str
 
 class ProxmoxConfig(BaseModel):
     storage_target: str
