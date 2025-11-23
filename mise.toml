@@ -1,0 +1,9 @@
+[settings]
+experimental = true
+
+[env]
+
+[env._]
+source = [
+    ".envrc",
+]
