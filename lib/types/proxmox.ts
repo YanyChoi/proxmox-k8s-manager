@@ -26,6 +26,7 @@ export interface ProxmoxVMConfig {
   ipconfig0?: string;
   nameserver?: string;
   searchdomain?: string;
+  cicustom?: string;
 }
 
 export interface ProxmoxTaskResponse {

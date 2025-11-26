@@ -9,6 +9,15 @@ export const proxmoxConfig = {
   apiToken: process.env.PROXMOX_API_TOKEN || '',
   node: process.env.PROXMOX_NODE || 'pve',
 
+  ssh: {
+    user: process.env.PROXMOX_SSH_USER || 'root',
+    port: parseInt(process.env.PROXMOX_SSH_PORT || '22'),
+    // SSH_PRIVATE_KEY should be base64 encoded
+    privateKey: process.env.SSH_PRIVATE_KEY
+      ? Buffer.from(process.env.SSH_PRIVATE_KEY, 'base64').toString('utf-8')
+      : '',
+  },
+
   template: {
     storage: process.env.PROXMOX_TEMPLATE_STORAGE || 'local-lvm',
     isoStorage: process.env.PROXMOX_TEMPLATE_ISO_STORAGE || 'local',

@@ -22,7 +22,21 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { vmid, name, memory, cores, sockets, cloudInitUser, cloudInitPassword, sshKeys } = body;
+    const {
+      vmid,
+      name,
+      memory,
+      cores,
+      sockets,
+      cloudInitUser,
+      cloudInitPassword,
+      sshKeys,
+      userDataCommands,
+      snippetStorage,
+      cloudImageUrl,
+      isoStorage,
+      diskSize,
+    } = body;
 
     const client = createProxmoxClient();
     const templateManager = createVMTemplateManager(client);
@@ -38,6 +52,11 @@ export async function POST(request: NextRequest) {
       cloudInitUser,
       cloudInitPassword,
       sshKeys,
+      userDataCommands,
+      snippetStorage,
+      cloudImageUrl,
+      isoStorage,
+      diskSize,
     });
 
     return NextResponse.json({

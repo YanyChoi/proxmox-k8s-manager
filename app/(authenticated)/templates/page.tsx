@@ -10,11 +10,11 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Plus, Trash2, Copy, RefreshCw } from 'lucide-react';
+import Link from 'next/link';
 
 interface Template {
   vmid: number;
@@ -26,17 +26,6 @@ interface Template {
   uptime?: number;
 }
 
-interface CreateTemplateForm {
-  vmid: string;
-  name: string;
-  memory: string;
-  cores: string;
-  sockets: string;
-  cloudInitUser: string;
-  cloudInitPassword: string;
-  sshKeys: string;
-}
-
 interface CloneForm {
   newVmid: string;
   name: string;
@@ -46,21 +35,9 @@ export default function TemplatesPage() {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [cloneDialogOpen, setCloneDialogOpen] = useState(false);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [submitting, setSubmitting] = useState(false);
-
-  const [createForm, setCreateForm] = useState<CreateTemplateForm>({
-    vmid: '9000',
-    name: 'ubuntu-2404-template',
-    memory: '4096',
-    cores: '2',
-    sockets: '1',
-    cloudInitUser: 'ubuntu',
-    cloudInitPassword: '',
-    sshKeys: '',
-  });
 
   const [cloneForm, setCloneForm] = useState<CloneForm>({
     newVmid: '100',
@@ -90,53 +67,6 @@ export default function TemplatesPage() {
     fetchTemplates();
   }, []);
 
-  const handleCreateTemplate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-
-    try {
-      const response = await fetch('/api/templates', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          vmid: parseInt(createForm.vmid),
-          name: createForm.name,
-          memory: parseInt(createForm.memory),
-          cores: parseInt(createForm.cores),
-          sockets: parseInt(createForm.sockets),
-          cloudInitUser: createForm.cloudInitUser,
-          cloudInitPassword: createForm.cloudInitPassword || undefined,
-          sshKeys: createForm.sshKeys || undefined,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to create template');
-      }
-
-      setCreateDialogOpen(false);
-      await fetchTemplates();
-
-      setCreateForm({
-        vmid: '9000',
-        name: 'ubuntu-2404-template',
-        memory: '4096',
-        cores: '2',
-        sockets: '1',
-        cloudInitUser: 'ubuntu',
-        cloudInitPassword: '',
-        sshKeys: '',
-      });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create template');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const handleCloneTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTemplate) return;
@@ -156,8 +86,8 @@ export default function TemplatesPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to clone template');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to clone template');
       }
 
       setCloneDialogOpen(false);
@@ -186,8 +116,8 @@ export default function TemplatesPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Failed to delete template');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to delete template');
       }
 
       await fetchTemplates();
@@ -222,115 +152,12 @@ export default function TemplatesPage() {
             <RefreshCw className={loading ? 'animate-spin' : ''} />
             Refresh
           </Button>
-          <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus />
-                Create Template
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
-                <DialogTitle>Create VM Template</DialogTitle>
-                <DialogDescription>
-                  Create a new Ubuntu cloud-init template for Kubernetes deployment
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleCreateTemplate}>
-                <div className="grid gap-4 py-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="vmid">VMID</Label>
-                      <Input
-                        id="vmid"
-                        type="number"
-                        value={createForm.vmid}
-                        onChange={(e) => setCreateForm({ ...createForm, vmid: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Name</Label>
-                      <Input
-                        id="name"
-                        value={createForm.name}
-                        onChange={(e) => setCreateForm({ ...createForm, name: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="memory">Memory (MB)</Label>
-                      <Input
-                        id="memory"
-                        type="number"
-                        value={createForm.memory}
-                        onChange={(e) => setCreateForm({ ...createForm, memory: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cores">Cores</Label>
-                      <Input
-                        id="cores"
-                        type="number"
-                        value={createForm.cores}
-                        onChange={(e) => setCreateForm({ ...createForm, cores: e.target.value })}
-                        required
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="sockets">Sockets</Label>
-                      <Input
-                        id="sockets"
-                        type="number"
-                        value={createForm.sockets}
-                        onChange={(e) => setCreateForm({ ...createForm, sockets: e.target.value })}
-                        required
-                      />
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cloudInitUser">Cloud-Init User</Label>
-                    <Input
-                      id="cloudInitUser"
-                      value={createForm.cloudInitUser}
-                      onChange={(e) => setCreateForm({ ...createForm, cloudInitUser: e.target.value })}
-                      placeholder="ubuntu"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cloudInitPassword">Cloud-Init Password (optional)</Label>
-                    <Input
-                      id="cloudInitPassword"
-                      type="password"
-                      value={createForm.cloudInitPassword}
-                      onChange={(e) => setCreateForm({ ...createForm, cloudInitPassword: e.target.value })}
-                      placeholder="Leave empty to use SSH keys only"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="sshKeys">SSH Public Keys (optional)</Label>
-                    <Input
-                      id="sshKeys"
-                      value={createForm.sshKeys}
-                      onChange={(e) => setCreateForm({ ...createForm, sshKeys: e.target.value })}
-                      placeholder="ssh-rsa AAAAB3..."
-                    />
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setCreateDialogOpen(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={submitting}>
-                    {submitting ? 'Creating...' : 'Create Template'}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <Link href="/templates/create">
+            <Button>
+              <Plus />
+              Create Template
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -349,10 +176,12 @@ export default function TemplatesPage() {
         <Card>
           <CardContent className="py-12 text-center">
             <p className="text-muted-foreground mb-4">No templates found</p>
-            <Button onClick={() => setCreateDialogOpen(true)}>
-              <Plus />
-              Create Your First Template
-            </Button>
+            <Link href="/templates/create">
+              <Button>
+                <Plus />
+                Create Your First Template
+              </Button>
+            </Link>
           </CardContent>
         </Card>
       ) : (
