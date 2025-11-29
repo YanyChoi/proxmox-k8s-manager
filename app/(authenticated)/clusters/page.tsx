@@ -48,6 +48,35 @@ export default function ClustersPage() {
     fetchClusters();
   }, []);
 
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const deleteCluster = async (clusterName: string) => {
+    if (!confirm(`Are you sure you want to delete cluster "${clusterName}"? This will stop and delete all VMs.`)) {
+      return;
+    }
+
+    setDeleting(clusterName);
+    setError(null);
+
+    try {
+      const response = await fetch(`/api/clusters/${clusterName}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to delete cluster');
+      }
+
+      // Refresh the cluster list
+      await fetchClusters();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete cluster');
+    } finally {
+      setDeleting(null);
+    }
+  };
+
   const downloadKubeconfig = async (clusterName: string) => {
     try {
       const response = await fetch(`/api/clusters/${clusterName}/kubeconfig`);
@@ -158,9 +187,14 @@ export default function ClustersPage() {
                       <Download className="h-4 w-4 mr-2" />
                       Kubeconfig
                     </Button>
-                    <Button variant="destructive" size="sm">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => deleteCluster(cluster.name)}
+                      disabled={deleting === cluster.name}
+                    >
                       <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
+                      {deleting === cluster.name ? 'Deleting...' : 'Delete'}
                     </Button>
                   </div>
                 </div>

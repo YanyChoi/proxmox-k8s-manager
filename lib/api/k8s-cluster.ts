@@ -19,6 +19,7 @@ export interface ClusterOptions {
   workerCount: number;
   sshPrivateKey: string; // SSH private key to access the VMs
   sshUser?: string; // SSH user for VMs (default: ubuntu)
+  cni?: string; // CNI plugin (default: cilium)
   startVmid?: number;
 }
 
@@ -48,6 +49,7 @@ export class KubernetesClusterManager {
       workerCount,
       sshPrivateKey,
       sshUser = 'ubuntu',
+      cni = 'cilium',
     } = options;
 
     const nodes: ClusterNode[] = [];
@@ -105,7 +107,7 @@ export class KubernetesClusterManager {
 
       // Generate Kubespray inventory locally
       console.log('Generating Kubespray inventory...');
-      const inventoryPath = await this.prepareInventory(name, nodes, sshPrivateKey, sshUser);
+      const inventoryPath = await this.prepareInventory(name, nodes, sshPrivateKey, sshUser, cni);
 
       // Run Kubespray locally
       console.log('Running Kubespray playbook...');
@@ -156,7 +158,8 @@ export class KubernetesClusterManager {
     clusterName: string,
     nodes: ClusterNode[],
     sshPrivateKey: string,
-    sshUser: string
+    sshUser: string,
+    cni: string
   ): Promise<string> {
     const clusterDir = path.join(kubesprayConfig.inventoryDir, clusterName);
 
@@ -172,12 +175,30 @@ export class KubernetesClusterManager {
     const inventory = this.generateKubesprayInventory(nodes, sshUser, sshKeyPath);
     await fs.writeFile(path.join(clusterDir, 'hosts.yaml'), inventory);
 
-    // Copy sample group_vars from Kubespray (resolve to handle relative paths)
-    const kubesprayAbsPath = path.resolve(kubesprayConfig.path);
-    const sampleDir = path.join(kubesprayAbsPath, 'inventory', 'sample', 'group_vars');
-    await this.copyDir(sampleDir, path.join(clusterDir, 'group_vars'));
+    // Copy inventory template from local project
+    const templateDir = path.join(process.cwd(), 'lib', 'templates', 'kubespray-inventory', 'group_vars');
+    await this.copyDir(templateDir, path.join(clusterDir, 'group_vars'));
+
+    // Configure CNI plugin
+    const k8sClusterVarsPath = path.join(clusterDir, 'group_vars', 'k8s_cluster', 'k8s-cluster.yml');
+    await this.updateK8sClusterVars(k8sClusterVarsPath, cni);
 
     return clusterDir;
+  }
+
+  private async updateK8sClusterVars(filePath: string, cni: string): Promise<void> {
+    try {
+      let content = await fs.readFile(filePath, 'utf-8');
+      // Replace the kube_network_plugin setting
+      content = content.replace(
+        /^kube_network_plugin:\s*\w+/m,
+        `kube_network_plugin: ${cni}`
+      );
+      await fs.writeFile(filePath, content);
+      console.log(`Configured CNI plugin: ${cni}`);
+    } catch (error) {
+      console.error('Failed to update k8s-cluster.yml:', error);
+    }
   }
 
   private async copyDir(src: string, dest: string): Promise<void> {

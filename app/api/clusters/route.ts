@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
       workerCount,
       sshPrivateKey,
       sshUser,
+      cni,
     } = body;
 
     // Validate required fields
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
       workerCount: parseInt(workerCount) || 0,
       sshPrivateKey,
       sshUser: sshUser || 'ubuntu',
+      cni: cni || 'cilium',
     };
 
     // Start cluster creation (this is a long-running operation)

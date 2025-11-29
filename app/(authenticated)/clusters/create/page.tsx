@@ -29,6 +29,7 @@ interface CreateClusterForm {
   workerCount: string;
   sshPrivateKey: string;
   sshUser: string;
+  cni: string;
 }
 
 export default function CreateClusterPage() {
@@ -45,6 +46,7 @@ export default function CreateClusterPage() {
     workerCount: '2',
     sshPrivateKey: '',
     sshUser: 'ubuntu',
+    cni: 'cilium',
   });
 
   useEffect(() => {
@@ -83,6 +85,7 @@ export default function CreateClusterPage() {
           workerCount: form.workerCount,
           sshPrivateKey: form.sshPrivateKey,
           sshUser: form.sshUser,
+          cni: form.cni,
         }),
       });
 
@@ -221,6 +224,27 @@ export default function CreateClusterPage() {
                 />
                 <p className="text-sm text-muted-foreground">
                   SSH user configured in the template (default: ubuntu)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="cni">Container Network Interface (CNI)</Label>
+                <Select
+                  value={form.cni}
+                  onValueChange={(value) => handleChange('cni', value)}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cilium">Cilium</SelectItem>
+                    <SelectItem value="calico">Calico</SelectItem>
+                    <SelectItem value="flannel">Flannel</SelectItem>
+                    <SelectItem value="weave">Weave</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  Network plugin for pod networking
                 </p>
               </div>
             </div>
