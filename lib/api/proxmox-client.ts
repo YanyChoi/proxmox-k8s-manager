@@ -431,6 +431,43 @@ export class ProxmoxAPIClient implements ProxmoxClient {
       }
     );
   }
+
+  async waitForVMIP(vmid: number, timeout: number = 300000): Promise<string> {
+    const startTime = Date.now();
+    const pollInterval = 5000;
+
+    console.log(`Waiting for VM ${vmid} to get IP address...`);
+
+    while (Date.now() - startTime < timeout) {
+      const interfaces = await this.getVMInterfaces(vmid);
+      const ip = this.extractIPAddress(interfaces);
+
+      if (ip) {
+        console.log(`VM ${vmid} got IP: ${ip}`);
+        return ip;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    }
+
+    throw new Error(`Timeout waiting for VM ${vmid} to get IP address`);
+  }
+
+  async listTemplates(): Promise<any[]> {
+    const response = await this.request<{ data: any[] }>(
+      `/cluster/resources?type=vm`,
+      'GET'
+    );
+    return response.data.filter((vm: any) => vm.template === 1);
+  }
+
+  async getNextVMID(): Promise<number> {
+    const response = await this.request<{ data: number }>(
+      `/cluster/nextid`,
+      'GET'
+    );
+    return response.data;
+  }
 }
 
 export const createProxmoxClient = (): ProxmoxAPIClient => {

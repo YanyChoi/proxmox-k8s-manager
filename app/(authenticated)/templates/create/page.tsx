@@ -64,7 +64,13 @@ export default function CreateTemplatePage() {
     cloudInitUser: 'ubuntu',
     cloudInitPassword: '',
     sshKeys: '',
-    userDataCommands: 'apt-get update\napt-get install -y qemu-guest-agent\nsystemctl enable qemu-guest-agent\nsystemctl start qemu-guest-agent',
+    userDataCommands: `# Update APT to point to Kakao Mirror Server (Remove if not in Korea)
+sed -i -e 's/archive.ubuntu.com/mirror.kakao.com/g' /etc/apt/sources.list.d/ubuntu.sources
+sed -i -e 's/security.ubuntu.com/mirror.kakao.com/g' /etc/apt/sources.list.d/ubuntu.sources
+apt-get update
+apt-get install -y qemu-guest-agent
+systemctl enable qemu-guest-agent
+systemctl start qemu-guest-agent`,
     snippetStorage: '',
     cloudImageUrl: '',
     isoStorage: '',

@@ -1,0 +1,10 @@
+# Update APT to point to Kakao Mirror Server (Remove if not in Korea)
+sed -i -e 's/archive.ubuntu.com/mirror.kakao.com/g' /etc/apt/source.list.d/ubuntu.sources
+sed -i -e 's/security.ubuntu.com/mirror.kakao.com/g' /etc/apt/source.list.d/ubuntu.sources
+# Setup QEMU Guest Agent
+apt-get update
+apt-get install -y qemu-guest-agent
+systemctl enable qemu-guest-agent
+systemctl start qemu-guest-agent
+# Install Docker
+curl -L https://get.docker.com | bash

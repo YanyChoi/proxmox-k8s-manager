@@ -46,10 +46,15 @@ export function Navbar() {
                   VMs
                 </Button>
               </Link>
-              <Button variant="ghost" size="sm" disabled>
-                <Network className="mr-2 h-4 w-4" />
-                Clusters
-              </Button>
+              <Link href="/clusters">
+                <Button
+                  variant={isActive('/clusters') || pathname.startsWith('/clusters') ? 'default' : 'ghost'}
+                  size="sm"
+                >
+                  <Network className="mr-2 h-4 w-4" />
+                  Clusters
+                </Button>
+              </Link>
             </div>
           </div>
           <div className="flex items-center gap-2">

@@ -29,6 +29,10 @@ export interface CloudInitUserData {
     shell?: string;
     ssh_authorized_keys?: string[];
   }>;
+  chpasswd?: {
+    list: string;
+    expire: boolean;
+  };
   package_upgrade?: boolean;
   packages?: string[];
   runcmd?: string[];
@@ -79,6 +83,14 @@ export class VMTemplateManager {
           newUser.ssh_authorized_keys = [options.sshKeys];
         }
         userData.users.push(newUser);
+      }
+
+      // Set password via chpasswd if provided
+      if (options.cloudInitPassword) {
+        userData.chpasswd = {
+          list: `${options.cloudInitUser}:${options.cloudInitPassword}`,
+          expire: false,
+        };
       }
     }
 

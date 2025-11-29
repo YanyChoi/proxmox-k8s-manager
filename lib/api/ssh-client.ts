@@ -104,7 +104,7 @@ export class ProxmoxSSHClient {
     cores: number,
     sockets: number
   ): Promise<void> {
-    const command = `qm create ${vmid} --name "${name}" --memory ${memory} --cores ${cores} --sockets ${sockets} --cpu host --net0 virtio,bridge=vmbr0 --scsihw virtio-scsi-pci`;
+    const command = `qm create ${vmid} --name "${name}" --memory ${memory} --cores ${cores} --sockets ${sockets} --cpu host --net0 virtio,bridge=vmbr0 --scsihw virtio-scsi-pci --agent enabled=1`;
     console.log(`Creating VM via SSH: ${command}`);
     const result = await this.exec(command);
     if (result.code !== 0) {
