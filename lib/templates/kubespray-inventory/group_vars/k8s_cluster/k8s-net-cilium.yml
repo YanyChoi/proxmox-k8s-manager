@@ -394,9 +394,15 @@ cilium_kube_proxy_replacement: true
 # Replaces MetalLB: Cilium assigns LoadBalancer IPs from this pool and
 # announces them over L2 (ARP). The pool must sit in the nodes' broadcast
 # domain, which is why every host on vmbr1 is masked /16.
+#
+# The key is `cidrs` and it takes a LIST (see the commented example above).
+# Kubespray renders `cilium_loadbalancer_ip_pool.cidrs | default([])`, so a
+# scalar `cidr:` yields a pool with NO blocks -- LoadBalancer services then
+# stay <pending> indefinitely and emit no event explaining why.
 cilium_loadbalancer_ip_pools:
   - name: ingress-pool
-    cidr: 10.100.9.0/24
+    cidrs:
+      - 10.100.9.0/24
 
 # kube-proxy replacement auto-enables Cilium's DNS proxy, which conflicts
 # with nodelocaldns.

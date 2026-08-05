@@ -1,0 +1,26 @@
+# Apply after cluster creation:
+#   kubectl apply -f manifests/cilium-l2-announcement.yaml
+#
+# Kubespray's `cilium_l2announcements: true` only turns the FEATURE on
+# (enable-l2-announcements in the cilium-config ConfigMap). Nothing is actually
+# announced until a policy selects which services and which interfaces. Without
+# this, a LoadBalancer Service is assigned an address from ingress-pool
+# (10.100.9.0/24) that no node ever answers ARP for -- the service looks
+# healthy in kubectl and is simply unreachable.
+#
+# L2 announcement is ARP-based, so the pool has to live in the same broadcast
+# domain as the nodes. That is why every host on vmbr1 is masked /16 and the
+# per-role /24s are allocation ranges rather than real subnets.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: default-l2-announcement
+spec:
+  loadBalancerIPs: true
+  # Node NICs are eth0 on these cloud-init images. Must not match cilium_host,
+  # cilium_net or cilium_vxlan, or announcements go out the wrong interface.
+  interfaces:
+    - ^eth[0-9]+$
+  nodeSelector:
+    matchLabels:
+      kubernetes.io/os: linux
