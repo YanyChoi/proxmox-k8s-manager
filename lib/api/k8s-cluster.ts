@@ -1,5 +1,6 @@
 import { ProxmoxAPIClient } from './proxmox-client';
 import { spawn } from 'child_process';
+import { Socket } from 'net';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
@@ -21,7 +22,58 @@ export interface ClusterOptions {
   sshUser?: string; // SSH user for VMs (default: ubuntu)
   cni?: string; // CNI plugin (default: cilium)
   startVmid?: number;
+  network?: Partial<ClusterNetwork>;
+  resources?: Partial<NodeResources>;
+  /**
+   * Role-based VMID bases, so VMIDs mirror addresses (VMID 11x <-> 10.100.1.1x,
+   * 12x <-> 10.100.2.1x) instead of depending on whatever getNextVMID returns.
+   * Pass `startVmid` instead to fall back to plain sequential allocation.
+   */
+  masterVmidBase?: number;
+  workerVmidBase?: number;
 }
+
+/**
+ * Node addressing. Every node sits on one flat L2 domain on `bridge` and is
+ * masked /`prefixLength` -- the per-role /24s are allocation ranges, not
+ * subnets. Cilium's L2 announcements are ARP-based, so the LoadBalancer pool
+ * (10.100.9.0/24) must stay in the same broadcast domain as the nodes.
+ */
+export interface ClusterNetwork {
+  bridge: string;
+  gateway: string;
+  prefixLength: number;
+  masterPrefix: string; // first three octets of the control plane range
+  workerPrefix: string; // first three octets of the worker range
+  hostStart: number; // last octet of the first node in each range
+  /**
+   * Proxmox seeds guest cloud-init from the *host's* resolver when this is
+   * unset. The PVE host resolves via Tailscale MagicDNS (100.100.100.100),
+   * which cluster nodes cannot reach -- they would boot with working IP
+   * routing but dead DNS. Always set this explicitly.
+   */
+  nameserver: string;
+}
+
+export interface NodeResources {
+  memoryMB: number;
+  cores: number;
+}
+
+export const DEFAULT_NETWORK: ClusterNetwork = {
+  bridge: 'vmbr1',
+  gateway: '10.100.0.1',
+  prefixLength: 16,
+  masterPrefix: '10.100.1',
+  workerPrefix: '10.100.2',
+  hostStart: 11,
+  nameserver: '1.1.1.1 8.8.8.8',
+};
+
+export const DEFAULT_RESOURCES: NodeResources = {
+  memoryMB: 8192,
+  cores: 2,
+};
 
 export interface ClusterStatus {
   name: string;
@@ -52,42 +104,51 @@ export class KubernetesClusterManager {
       cni = 'cilium',
     } = options;
 
+    const netCfg: ClusterNetwork = { ...DEFAULT_NETWORK, ...options.network };
+    const resources: NodeResources = { ...DEFAULT_RESOURCES, ...options.resources };
+
+    // etcd needs a quorum majority, so an even control plane is strictly worse
+    // than the odd number below it -- 2 nodes tolerate 0 failures, same as 1.
+    if (masterCount % 2 === 0) {
+      throw new Error(
+        `masterCount must be odd (1, 3, 5) so etcd can form a quorum; got ${masterCount}`
+      );
+    }
+
     const nodes: ClusterNode[] = [];
+    // Sequential allocation is only used when role bases are not given.
     let currentVmid = options.startVmid || await this.client.getNextVMID();
+    const { masterVmidBase, workerVmidBase } = options;
 
     try {
-      // Create master nodes
-      console.log(`Creating ${masterCount} master node(s)...`);
-      for (let i = 0; i < masterCount; i++) {
-        const nodeName = `${name}-master-${i + 1}`;
-        const vmid = currentVmid++;
+      const planned = [
+        ...Array.from({ length: masterCount }, (_, i) => ({ role: 'master' as const, index: i })),
+        ...Array.from({ length: workerCount }, (_, i) => ({ role: 'worker' as const, index: i })),
+      ];
 
-        console.log(`Cloning template to create ${nodeName} (VMID: ${vmid})...`);
+      for (const { role, index } of planned) {
+        const nodeName = `${name}-${role}-${index + 1}`;
+        const base = role === 'master' ? masterVmidBase : workerVmidBase;
+        const vmid = base !== undefined ? base + index : currentVmid++;
+        const ip = this.nodeIp(netCfg, role, index);
+
+        console.log(`Cloning template to create ${nodeName} (VMID: ${vmid}, IP: ${ip})...`);
         const taskId = await this.client.cloneVM(templateVmid, vmid, nodeName);
         await this.client.waitForTask(taskId);
 
-        nodes.push({
-          vmid,
-          name: nodeName,
-          role: 'master',
+        // Configure before first boot. Changing cloud-init settings after a
+        // guest has booted alters its instance-id, which makes cloud-init
+        // re-run and regenerate the SSH host keys.
+        await this.client.configureVM(vmid, {
+          net0: `virtio,bridge=${netCfg.bridge}`,
+          ipconfig0: `ip=${ip}/${netCfg.prefixLength},gw=${netCfg.gateway}`,
+          nameserver: netCfg.nameserver,
+          memory: resources.memoryMB,
+          cores: resources.cores,
+          onboot: 1,
         });
-      }
 
-      // Create worker nodes
-      console.log(`Creating ${workerCount} worker node(s)...`);
-      for (let i = 0; i < workerCount; i++) {
-        const nodeName = `${name}-worker-${i + 1}`;
-        const vmid = currentVmid++;
-
-        console.log(`Cloning template to create ${nodeName} (VMID: ${vmid})...`);
-        const taskId = await this.client.cloneVM(templateVmid, vmid, nodeName);
-        await this.client.waitForTask(taskId);
-
-        nodes.push({
-          vmid,
-          name: nodeName,
-          role: 'worker',
-        });
+        nodes.push({ vmid, name: nodeName, role, ip });
       }
 
       // Start all nodes
@@ -98,11 +159,17 @@ export class KubernetesClusterManager {
         await this.client.waitForTask(taskId);
       }
 
-      // Wait for all nodes to get IP addresses
-      console.log('Waiting for nodes to get IP addresses...');
+      // Addresses are assigned above rather than discovered, so there is no
+      // waitForVMIP() poll here -- which also drops the dependency on
+      // qemu-guest-agent, the slowest part of a cold boot. We only need to
+      // know each node is accepting SSH before handing over to Ansible.
+      console.log('Waiting for nodes to accept SSH...');
       for (const node of nodes) {
-        node.ip = await this.client.waitForVMIP(node.vmid);
-        console.log(`${node.name}: ${node.ip}`);
+        const ready = await this.waitForPort(node.ip!, 22, 300000);
+        if (!ready) {
+          throw new Error(`${node.name} (${node.ip}) did not accept SSH within 5 minutes`);
+        }
+        console.log(`${node.name}: ready at ${node.ip}`);
       }
 
       // Generate Kubespray inventory locally
@@ -154,6 +221,41 @@ export class KubernetesClusterManager {
     }
   }
 
+  /**
+   * Derives a node's address from its role and index, so node count can change
+   * without hand-editing addressing. Control plane and workers get separate
+   * /24 allocation ranges inside one flat /16 L2 domain.
+   */
+  private nodeIp(net: ClusterNetwork, role: 'master' | 'worker', index: number): string {
+    const prefix = role === 'master' ? net.masterPrefix : net.workerPrefix;
+    const host = net.hostStart + index;
+    if (host > 254) {
+      throw new Error(`too many ${role} nodes: host octet ${host} exceeds 254`);
+    }
+    return `${prefix}.${host}`;
+  }
+
+  private async waitForPort(host: string, port: number, timeoutMs: number): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const open = await new Promise<boolean>((resolve) => {
+        const socket = new Socket();
+        const done = (result: boolean) => {
+          socket.destroy();
+          resolve(result);
+        };
+        socket.setTimeout(3000);
+        socket.once('connect', () => done(true));
+        socket.once('timeout', () => done(false));
+        socket.once('error', () => done(false));
+        socket.connect(port, host);
+      });
+      if (open) return true;
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+    return false;
+  }
+
   private async prepareInventory(
     clusterName: string,
     nodes: ClusterNode[],
@@ -167,9 +269,10 @@ export class KubernetesClusterManager {
     await fs.mkdir(path.join(clusterDir, 'group_vars', 'all'), { recursive: true });
     await fs.mkdir(path.join(clusterDir, 'group_vars', 'k8s_cluster'), { recursive: true });
 
-    // Write SSH private key
+    // Write SSH private key (normalize line endings and ensure trailing newline)
     const sshKeyPath = path.join(clusterDir, 'ssh_key');
-    await fs.writeFile(sshKeyPath, sshPrivateKey, { mode: 0o600 });
+    const normalizedKey = sshPrivateKey.replace(/\r\n/g, '\n').trim() + '\n';
+    await fs.writeFile(sshKeyPath, normalizedKey, { mode: 0o600 });
 
     // Generate and write hosts.yaml
     const inventory = this.generateKubesprayInventory(nodes, sshUser, sshKeyPath);

@@ -1,0 +1,27 @@
+# Rebuilt inside the image
+node_modules
+.next
+out
+build
+
+# Cloned in the Dockerfile at a pinned tag -- never copy a local checkout in,
+# or the image silently diverges from KUBESPRAY_VERSION.
+kubespray
+
+# Secrets: supplied at runtime via env_file / mounts, never baked into a layer
+.env
+.env.*
+.envrc
+id_ed25519
+id_ed25519.pub
+*.pem
+*.key
+
+.git
+.gitignore
+Dockerfile
+compose.yaml
+*.tsbuildinfo
+.DS_Store
+npm-debug.log*
+.pnpm-debug.log*

@@ -1,0 +1,55 @@
+# Runs on the Proxmox mgmt VM (10.100.0.10).
+#
+#   docker compose build
+#   docker compose up -d
+#
+# Cluster build (long-running, streams Ansible output). No --env-file needed:
+# compose already loads .env into the container environment.
+#   docker compose exec app tsx scripts/create-cluster.ts
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        KUBESPRAY_VERSION: v2.31.0
+    # Override to a registry ref when publishing, e.g.
+    #   IMAGE=ghcr.io/yanychoi/proxmox-k8s-manager:v0.1.0 docker compose build
+    image: ${IMAGE:-proxmox-k8s-manager:local}
+    container_name: proxmox-k8s-manager
+
+    # Proxmox API token and template settings. Never baked into the image.
+    env_file: .env
+
+    # `environment` wins over `env_file`. .env carries host paths for running
+    # the app directly on the VM; these are the in-container equivalents.
+    # Without this override the app looks for Kubespray at a path that does not
+    # exist in the image and silently falls back to a system ansible-playbook.
+    environment:
+      KUBESPRAY_PATH: /opt/kubespray
+      KUBESPRAY_INVENTORY_DIR: /data/inventories
+
+    ports:
+      - "3000:3000"
+
+    volumes:
+      # Generated inventories, hosts.yaml and the retrieved kubeconfig. A named
+      # volume so a rebuild does not discard a live cluster's inventory.
+      - inventories:/data/inventories
+      # The mgmt VM's own key, authorised on the template alongside the
+      # workstation key. Read-only; ssh rejects group/world-readable keys.
+      - ${SSH_KEY_PATH:-/home/ubuntu/.ssh/id_ed25519}:/root/.ssh/id_ed25519:ro
+
+    # Kubespray runs 30-40 minutes; do not let a restart interrupt it, but do
+    # recover if the VM reboots.
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  inventories:

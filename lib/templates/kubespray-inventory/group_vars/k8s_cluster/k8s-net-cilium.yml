@@ -7,7 +7,7 @@
 # cilium_enable_ipv6: false
 
 # Enable l2 announcement from cilium to replace Metallb Ref: https://docs.cilium.io/en/v1.14/network/l2-announcements/
-cilium_l2announcements: false
+cilium_l2announcements: true
 
 # Cilium agent health port
 # cilium_agent_health_port: "9879"
@@ -56,8 +56,8 @@ cilium_l2announcements: false
 #
 # Only effective when monitor aggregation is set to "medium" or higher.
 # cilium_monitor_aggregation_flags: "all"
-# Kube Proxy Replacement mode (strict/partial)
-# cilium_kube_proxy_replacement: partial
+# Kube Proxy Replacement mode (true/false)
+# cilium_kube_proxy_replacement: false
 
 # If upgrading from Cilium < 1.5, you may want to override some of these options
 # to prevent service disruptions. See also:
@@ -361,8 +361,6 @@ cilium_l2announcements: false
 # -- Enable the use of well-known identities.
 # cilium_enable_well_known_identities: false
 
-# cilium_enable_bpf_clock_probe: true
-
 # -- Whether to enable CNP status updates.
 # cilium_disable_cnp_status_updates: true
 
@@ -388,3 +386,18 @@ cilium_l2announcements: false
 # Cilium extra values, use any values from cilium Helm Chart
 # ref: https://docs.cilium.io/en/stable/helm-reference/
 # cilium_extra_values: {}
+
+# --- local overrides ---
+# Replaces kube-proxy with Cilium's eBPF dataplane.
+cilium_kube_proxy_replacement: true
+
+# Replaces MetalLB: Cilium assigns LoadBalancer IPs from this pool and
+# announces them over L2 (ARP). The pool must sit in the nodes' broadcast
+# domain, which is why every host on vmbr1 is masked /16.
+cilium_loadbalancer_ip_pools:
+  - name: ingress-pool
+    cidr: 10.100.9.0/24
+
+# kube-proxy replacement auto-enables Cilium's DNS proxy, which conflicts
+# with nodelocaldns.
+cilium_dns_proxy_enable_transparent_mode: false

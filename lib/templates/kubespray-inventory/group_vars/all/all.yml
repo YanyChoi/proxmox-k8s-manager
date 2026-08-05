@@ -140,3 +140,11 @@ unsafe_show_logs: false
 
 ## If enabled it will allow kubespray to attempt setup even if the distribution is not supported. For unsupported distributions this can lead to unexpected failures in some cases.
 allow_unsupported_distribution_setup: false
+
+# --- local overrides ---
+# External API server load balancer (HAProxy on the router VM). Cilium cannot
+# provide this VIP itself: its LB IPAM runs as in-cluster pods that need a
+# reachable API server to start.
+loadbalancer_apiserver:
+  address: 10.100.0.1
+  port: 6443
