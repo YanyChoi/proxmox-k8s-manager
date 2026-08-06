@@ -407,3 +407,13 @@ cilium_loadbalancer_ip_pools:
 # kube-proxy replacement auto-enables Cilium's DNS proxy, which conflicts
 # with nodelocaldns.
 cilium_dns_proxy_enable_transparent_mode: false
+
+# --- Hubble observability ---
+# enable-hubble in each agent, plus Relay (cluster-wide flow aggregation) and
+# the web UI. cilium_enable_hubble_ui defaults to cilium_enable_hubble.
+cilium_enable_hubble: true
+cilium_hubble_install: true
+# Generates the mTLS material Relay uses to reach each agent's :4244. Without
+# it Relay starts, fails its startup probe against every peer, and restarts
+# forever while looking superficially healthy.
+cilium_hubble_tls_generate: true
