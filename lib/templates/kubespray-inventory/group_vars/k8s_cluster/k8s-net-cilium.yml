@@ -417,3 +417,10 @@ cilium_hubble_install: true
 # it Relay starts, fails its startup probe against every peer, and restarts
 # forever while looking superficially healthy.
 cilium_hubble_tls_generate: true
+
+# --- Gateway API ---
+# Served by the per-node cilium-envoy DaemonSet that is already running, so no
+# sidecars and no separate ingress controller. Requires gateway_api_enabled
+# (and the version pin) in addons.yml -- the CRDs must exist first, which
+# cluster.yml already orders correctly (common_crds before network_plugin).
+cilium_gateway_api_enabled: true

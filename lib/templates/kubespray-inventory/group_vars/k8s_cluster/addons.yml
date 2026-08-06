@@ -61,7 +61,18 @@ local_volume_provisioner_enabled: false
 # snapshot_controller_namespace: kube-system
 
 # Gateway API CRDs
-gateway_api_enabled: false
+gateway_api_enabled: true
+# Pin to the release Cilium 1.19 is conformance-tested against. Cilium
+# >=1.19.1 <1.20.0 needs TLSRoute at gateway.networking.k8s.io/v1alpha2, which
+# Gateway API v1.5.0 removed. On v1.5.x the cilium-operator dies at startup
+# ("no matches for kind TLSRoute in version .../v1alpha2"), so it never
+# registers ciliumenvoyconfigs / ciliumclusterwideenvoyconfigs, and every agent
+# then hangs on "Still waiting for Cilium Operator to register CRDs" -- the
+# whole CNI stays NotReady. Ref: https://github.com/cilium/cilium/issues/45139
+#
+# Set it HERE, not in group_vars/all/: k8s_cluster group_vars outrank
+# group_vars/all, so a value in all.yml is silently ignored.
+gateway_api_version: "1.4.0"
 
 # ALB ingress controller deployment
 ingress_alb_enabled: false
