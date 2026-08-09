@@ -72,8 +72,11 @@ KUBESPRAY_INVENTORY_DIR=/tmp/kubespray-inventories
 # --- Tailscale integration (optional; each add-on activates when its creds are set) ---
 # Router VM (NAT + HAProxy :6443 + Tailscale subnet router). Set the auth key to
 # have create-cluster provision a fresh gateway VM before the nodes.
-TAILSCALE_AUTHKEY=tskey-auth-...
+TAILSCALE_AUTHKEY=tskey-auth-...   # prefer an EPHEMERAL / single-use key (see note below)
 ROUTER_VMID=101              # must be an UNUSED id -- a live router is never adopted
+# NOTE: ROUTER_LAN_ADDRESS defaults to 10.100.0.1 -- the address a live router
+# already holds. Running this against an existing stack puts two hosts on the
+# gateway IP and breaks cluster networking. The IP collides, not just the VMID.
 ROUTER_WAN_BRIDGE=vmbr0     # egress / default route (DHCP)
 ROUTER_LAN_BRIDGE=vmbr1     # cluster L2; router owns 10.100.0.1
 # ROUTER_LAN_ADDRESS, ROUTER_LAN_PREFIX, ROUTER_ADVERTISE_ROUTES, ROUTER_MEMORY_MB,
@@ -254,9 +257,12 @@ The app will automatically use `ansible-playbook` from the `venv/bin/` directory
 
 The two integrations authenticate differently and each needs a one-time tailnet setup:
 
-- **Router (subnet router)** — a reusable, tagged auth key (`TAILSCALE_AUTHKEY`). In the
+- **Router (subnet router)** — a tagged auth key (`TAILSCALE_AUTHKEY`). In the
   tailnet policy, add a `tagOwners` entry for its tag and an **autoApprover** for the
   advertised route (e.g. `10.100.0.0/16`), or the route stays pending and nothing routes.
+  Prefer an **ephemeral / single-use** key: the rendered cloud-init snippet is deleted
+  from the Proxmox host after the router boots, but the key still lands in the guest's
+  cloud-init logs, so a single-use key means any residual copy is already spent.
 - **Operator (API server proxy)** — an OAuth client with `Devices Core` + `Auth Keys`
   write, tagged `tag:k8s-operator`; plus `tagOwners` for `tag:k8s-operator`/`tag:k8s`
   and a `grants` rule mapping your users to a Kubernetes group via

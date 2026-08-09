@@ -1,6 +1,6 @@
 import { ProxmoxAPIClient } from './proxmox-client';
 import { routerConfig } from '../config/proxmox';
-import { Socket } from 'net';
+import { waitForPort } from './net';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -198,30 +198,26 @@ export class RouterManager {
     }
     console.log(`Router ${name} ready at ${lanAddress}`);
 
+    // The rendered snippet holds the auth key in plaintext and outlives the VM
+    // on the Proxmox host. cloud-init has consumed it by now, so remove it.
+    // Note this does NOT scrub the guest's own cloud-init logs
+    // (/var/lib/cloud/instance/user-data.txt, cloud-init-output.log) -- prefer
+    // an ephemeral/single-use auth key so any residual copy is already spent.
+    // The `cicustom` reference is left intact deliberately: clearing it would
+    // change the VM's cloud-init config and regenerate SSH host keys on the next
+    // boot (see runbook). A dangling reference only matters on a manual regen.
+    try {
+      await this.client.deleteStorageContent(
+        snippetStorage,
+        `${snippetStorage}:snippets/${snippetFilename}`
+      );
+      console.log(`Removed router cloud-init snippet ${snippetFilename}`);
+    } catch (err) {
+      console.warn(`Could not remove router cloud-init snippet: ${err}`);
+    }
+
     return { vmid, name, lanAddress };
   }
-}
-
-/** Polls a TCP port until it accepts a connection or the timeout elapses. */
-async function waitForPort(host: string, port: number, timeoutMs: number): Promise<boolean> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const open = await new Promise<boolean>((resolve) => {
-      const socket = new Socket();
-      const done = (result: boolean) => {
-        socket.destroy();
-        resolve(result);
-      };
-      socket.setTimeout(3000);
-      socket.once('connect', () => done(true));
-      socket.once('timeout', () => done(false));
-      socket.once('error', () => done(false));
-      socket.connect(port, host);
-    });
-    if (open) return true;
-    await new Promise((resolve) => setTimeout(resolve, 5000));
-  }
-  return false;
 }
 
 export const createRouterManager = (client: ProxmoxAPIClient): RouterManager => {

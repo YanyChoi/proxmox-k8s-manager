@@ -35,10 +35,13 @@ RUN apt-get update \
       ca-certificates curl git openssh-client sshpass \
  && rm -rf /var/lib/apt/lists/*
 
-# helm + kubectl: installTailscaleOperator() shells out to `helm` (which needs a
+# helm + kubectl: the operator install shells out to `helm` (which needs a
 # working KUBECONFIG) to install the operator into a freshly built cluster.
+# Both pinned so image builds are reproducible; get-helm-3 honors DESIRED_VERSION.
 ARG KUBECTL_VERSION=v1.35.4
-RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash \
+ARG HELM_VERSION=v3.16.4
+RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 \
+      | DESIRED_VERSION="${HELM_VERSION}" bash \
  && curl -fsSLo /usr/local/bin/kubectl \
       "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
  && chmod +x /usr/local/bin/kubectl

@@ -48,7 +48,7 @@ const HELM_REPO_URL = 'https://pkgs.tailscale.com/helmcharts';
  * finally. Helm still persists the values into an in-cluster secret, which is
  * expected and where the operator reads them from.
  */
-export async function installTailscaleOperator(
+async function installOperator(
   options: OperatorOptions
 ): Promise<OperatorResult> {
   const helm = options.helmPath ?? 'helm';
@@ -121,6 +121,20 @@ export async function installTailscaleOperator(
 
   return { installed: true, endpoint };
 }
+
+/**
+ * Class + factory wrapper to match the codebase's manager convention
+ * (createXManager().method()). The operator install is Helm-only and holds no
+ * Proxmox state, so the class is thin.
+ */
+export class TailscaleOperatorManager {
+  install(options: OperatorOptions): Promise<OperatorResult> {
+    return installOperator(options);
+  }
+}
+
+export const createTailscaleOperatorManager = (): TailscaleOperatorManager =>
+  new TailscaleOperatorManager();
 
 /** Spawns a command, streaming output, and rejects on non-zero exit. */
 function run(cmd: string, args: string[], env: NodeJS.ProcessEnv): Promise<void> {

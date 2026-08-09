@@ -1,12 +1,11 @@
 import { ProxmoxAPIClient } from './proxmox-client';
 import { createRouterManager, RouterResult } from './router';
-import { installTailscaleOperator } from './tailscale-operator';
+import { createTailscaleOperatorManager } from './tailscale-operator';
+import { waitForPort } from './net';
 import { spawn } from 'child_process';
-import { Socket } from 'net';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 
 export interface ClusterNode {
   vmid: number;
@@ -222,7 +221,7 @@ export class KubernetesClusterManager {
       // know each node is accepting SSH before handing over to Ansible.
       console.log('Waiting for nodes to accept SSH...');
       for (const node of nodes) {
-        const ready = await this.waitForPort(node.ip!, 22, 300000);
+        const ready = await waitForPort(node.ip!, 22, 300000);
         if (!ready) {
           throw new Error(`${node.name} (${node.ip}) did not accept SSH within 5 minutes`);
         }
@@ -270,7 +269,7 @@ export class KubernetesClusterManager {
           if (!kubeconfigPath) {
             throw new Error('kubeconfig was not retrieved');
           }
-          const result = await installTailscaleOperator({
+          const result = await createTailscaleOperatorManager().install({
             kubeconfigPath,
             oauthClientId: options.operator.oauthClientId,
             oauthClientSecret: options.operator.oauthClientSecret,
@@ -309,9 +308,7 @@ export class KubernetesClusterManager {
       // this run created a fresh VM.
       if (router) {
         console.log('Cleaning up created router...');
-        await this.deleteCluster([
-          { vmid: router.vmid, name: router.name, role: 'master' },
-        ]).catch(() => {});
+        await this.deleteVM(router.vmid, router.name).catch(() => {});
       }
 
       return {
@@ -335,27 +332,6 @@ export class KubernetesClusterManager {
       throw new Error(`too many ${role} nodes: host octet ${host} exceeds 254`);
     }
     return `${prefix}.${host}`;
-  }
-
-  private async waitForPort(host: string, port: number, timeoutMs: number): Promise<boolean> {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      const open = await new Promise<boolean>((resolve) => {
-        const socket = new Socket();
-        const done = (result: boolean) => {
-          socket.destroy();
-          resolve(result);
-        };
-        socket.setTimeout(3000);
-        socket.once('connect', () => done(true));
-        socket.once('timeout', () => done(false));
-        socket.once('error', () => done(false));
-        socket.connect(port, host);
-      });
-      if (open) return true;
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    }
-    return false;
   }
 
   private async prepareInventory(
@@ -625,21 +601,24 @@ export class KubernetesClusterManager {
   async deleteCluster(nodes: ClusterNode[]): Promise<void> {
     console.log('Deleting cluster nodes...');
     for (const node of nodes) {
-      try {
-        // Stop VM first
-        console.log(`Stopping ${node.name}...`);
-        const stopTaskId = await this.client.stopVM(node.vmid);
-        await this.client.waitForTask(stopTaskId).catch(() => {});
-
-        // Delete VM
-        console.log(`Deleting ${node.name}...`);
-        const deleteTaskId = await this.client.deleteVM(node.vmid);
-        await this.client.waitForTask(deleteTaskId);
-      } catch (error) {
-        console.error(`Failed to delete ${node.name}:`, error);
-      }
+      await this.deleteVM(node.vmid, node.name);
     }
     console.log('Cluster deleted.');
+  }
+
+  /** Stops (best-effort) then deletes a single VM. Never throws. */
+  private async deleteVM(vmid: number, name: string): Promise<void> {
+    try {
+      console.log(`Stopping ${name}...`);
+      const stopTaskId = await this.client.stopVM(vmid);
+      await this.client.waitForTask(stopTaskId).catch(() => {});
+
+      console.log(`Deleting ${name}...`);
+      const deleteTaskId = await this.client.deleteVM(vmid);
+      await this.client.waitForTask(deleteTaskId);
+    } catch (error) {
+      console.error(`Failed to delete ${name}:`, error);
+    }
   }
 }
 
