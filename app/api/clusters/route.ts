@@ -58,6 +58,8 @@ export async function POST(request: NextRequest) {
       sshPrivateKey,
       sshUser,
       cni,
+      router,
+      operator,
     } = body;
 
     // Validate required fields
@@ -79,6 +81,10 @@ export async function POST(request: NextRequest) {
       sshPrivateKey,
       sshUser: sshUser || 'ubuntu',
       cni: cni || 'cilium',
+      // Optional add-ons: create a fresh router VM and/or install the Tailscale
+      // operator. Passed straight through when supplied by the caller.
+      router,
+      operator,
     };
 
     // Start cluster creation (this is a long-running operation)

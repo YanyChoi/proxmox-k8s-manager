@@ -1,4 +1,6 @@
 import { ProxmoxAPIClient } from './proxmox-client';
+import { createRouterManager, RouterResult } from './router';
+import { installTailscaleOperator } from './tailscale-operator';
 import { spawn } from 'child_process';
 import { Socket } from 'net';
 import * as fs from 'fs/promises';
@@ -31,6 +33,33 @@ export interface ClusterOptions {
    */
   masterVmidBase?: number;
   workerVmidBase?: number;
+  /**
+   * When set, provision a fresh gateway/router VM (NAT + HAProxy + Tailscale
+   * subnet router) BEFORE the nodes -- it owns their gateway address. This
+   * always creates a new VM; point `vmid` at an unused id so a live router is
+   * left alone.
+   */
+  router?: RouterProvisionOptions;
+  /**
+   * When set, install the Tailscale operator (with the API server proxy) into
+   * the cluster after Kubespray finishes and the kubeconfig is retrieved.
+   */
+  operator?: OperatorProvisionOptions;
+}
+
+export interface RouterProvisionOptions {
+  /** Auth key the router uses to join the tailnet (tagged, reusable). */
+  authKey: string;
+  vmid?: number;
+  wanBridge?: string;
+  lanBridge?: string;
+}
+
+export interface OperatorProvisionOptions {
+  oauthClientId: string;
+  oauthClientSecret: string;
+  hostname?: string;
+  tailnet?: string;
 }
 
 /**
@@ -119,8 +148,30 @@ export class KubernetesClusterManager {
     // Sequential allocation is only used when role bases are not given.
     let currentVmid = options.startVmid || await this.client.getNextVMID();
     const { masterVmidBase, workerVmidBase } = options;
+    let router: RouterResult | undefined;
 
     try {
+      // The router is the nodes' gateway, so it must exist and be routing before
+      // any node boots. Its HAProxy backend is the (deterministic) set of
+      // control-plane addresses, which we can derive before cloning anything.
+      if (options.router) {
+        const masterIps = Array.from({ length: masterCount }, (_, i) =>
+          this.nodeIp(netCfg, 'master', i)
+        );
+        const routerManager = createRouterManager(this.client);
+        router = await routerManager.createRouter({
+          templateVmid,
+          tailscaleAuthKey: options.router.authKey,
+          masterIps,
+          vmid: options.router.vmid,
+          wanBridge: options.router.wanBridge,
+          lanBridge: netCfg.bridge,
+          lanAddress: netCfg.gateway,
+          lanPrefix: netCfg.prefixLength,
+          nameserver: netCfg.nameserver,
+        });
+      }
+
       const planned = [
         ...Array.from({ length: masterCount }, (_, i) => ({ role: 'master' as const, index: i })),
         ...Array.from({ length: workerCount }, (_, i) => ({ role: 'worker' as const, index: i })),
@@ -180,9 +231,12 @@ export class KubernetesClusterManager {
       console.log('Running Kubespray playbook...');
       await this.runKubespray(inventoryPath);
 
-      // Retrieve kubeconfig from master node
+      // Retrieve kubeconfig from master node. admin.conf already points at the
+      // HAProxy VIP (loadbalancer_apiserver in group_vars/all), so it is usable
+      // as-is from the mgmt VM -- including for the operator install below.
       console.log('Retrieving kubeconfig from master node...');
       const masterNode = nodes.find(n => n.role === 'master');
+      let kubeconfigPath: string | undefined;
       if (masterNode?.ip) {
         const kubeconfig = await this.retrieveKubeconfig(
           masterNode.ip,
@@ -190,9 +244,27 @@ export class KubernetesClusterManager {
           path.join(inventoryPath, 'ssh_key')
         );
         if (kubeconfig) {
-          const kubeconfigPath = path.join(inventoryPath, 'kubeconfig');
+          kubeconfigPath = path.join(inventoryPath, 'kubeconfig');
           await fs.writeFile(kubeconfigPath, kubeconfig);
           console.log(`Kubeconfig saved to ${kubeconfigPath}`);
+        }
+      }
+
+      // Install the Tailscale operator + API server proxy, so the cluster is
+      // reachable over the tailnet by identity with no certs to distribute.
+      if (options.operator) {
+        if (!kubeconfigPath) {
+          throw new Error('cannot install Tailscale operator: kubeconfig was not retrieved');
+        }
+        const result = await installTailscaleOperator({
+          kubeconfigPath,
+          oauthClientId: options.operator.oauthClientId,
+          oauthClientSecret: options.operator.oauthClientSecret,
+          hostname: options.operator.hostname,
+          tailnet: options.operator.tailnet,
+        });
+        if (result.endpoint) {
+          console.log(`Cluster API reachable over Tailscale at ${result.endpoint}`);
         }
       }
 
@@ -210,6 +282,16 @@ export class KubernetesClusterManager {
       if (nodes.length > 0) {
         console.log('Cleaning up created nodes...');
         await this.deleteCluster(nodes);
+      }
+
+      // And the router, if this run created it. Only tear down a router we just
+      // built -- an existing one is never adopted, so `router` is only set when
+      // this run created a fresh VM.
+      if (router) {
+        console.log('Cleaning up created router...');
+        await this.deleteCluster([
+          { vmid: router.vmid, name: router.name, role: 'master' },
+        ]).catch(() => {});
       }
 
       return {

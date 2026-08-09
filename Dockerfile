@@ -29,10 +29,19 @@ FROM node:22-bookworm-slim AS runtime
 # openssh-client: Ansible shells out to ssh, and retrieveKubeconfig() spawns it
 #                 directly to fetch /etc/kubernetes/admin.conf
 # git:            used to clone Kubespray below
+# curl:           fetch the helm installer and kubectl below
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
-      ca-certificates git openssh-client sshpass \
+      ca-certificates curl git openssh-client sshpass \
  && rm -rf /var/lib/apt/lists/*
+
+# helm + kubectl: installTailscaleOperator() shells out to `helm` (which needs a
+# working KUBECONFIG) to install the operator into a freshly built cluster.
+ARG KUBECTL_VERSION=v1.35.4
+RUN curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash \
+ && curl -fsSLo /usr/local/bin/kubectl \
+      "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
+ && chmod +x /usr/local/bin/kubectl
 
 COPY --from=ghcr.io/astral-sh/uv:0.8.15 /uv /usr/local/bin/uv
 
