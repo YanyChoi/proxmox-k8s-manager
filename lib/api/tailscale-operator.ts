@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import * as yaml from 'yaml';
 import { tailscaleConfig } from '../config/proxmox';
 
 /**
@@ -69,16 +70,21 @@ export async function installTailscaleOperator(
   const valuesDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ts-operator-'));
   const valuesPath = path.join(valuesDir, 'values.yaml');
   try {
+    // Serialize with yaml.stringify rather than string interpolation so a quote
+    // or newline in the OAuth secret cannot break the file or inject YAML.
     // apiServerProxyConfig.mode is a STRING enum ("true"/"false"/"noauth"), not
-    // a boolean -- Helm --set would coerce it wrong, so write real YAML.
-    const values =
-      `oauth:\n` +
-      `  clientId: "${options.oauthClientId}"\n` +
-      `  clientSecret: "${options.oauthClientSecret}"\n` +
-      `operatorConfig:\n` +
-      `  hostname: "${hostname}"\n` +
-      (apiServerProxy ? `apiServerProxyConfig:\n  mode: "true"\n` : '');
-    await fs.writeFile(valuesPath, values, { mode: 0o600 });
+    // a boolean -- keep it quoted so Helm does not coerce it.
+    const values: Record<string, unknown> = {
+      oauth: {
+        clientId: options.oauthClientId,
+        clientSecret: options.oauthClientSecret,
+      },
+      operatorConfig: { hostname },
+    };
+    if (apiServerProxy) {
+      values.apiServerProxyConfig = { mode: 'true' };
+    }
+    await fs.writeFile(valuesPath, yaml.stringify(values), { mode: 0o600 });
 
     const args = [
       'upgrade',

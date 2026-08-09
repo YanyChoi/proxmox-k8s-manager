@@ -109,6 +109,12 @@ export interface ClusterStatus {
   status: 'creating' | 'provisioning' | 'running' | 'failed';
   nodes: ClusterNode[];
   error?: string;
+  /**
+   * Non-fatal problems from post-cluster add-ons (e.g. the Tailscale operator).
+   * The cluster is up and usable; these are surfaced so a failed add-on doesn't
+   * masquerade as success but also doesn't roll back a working cluster.
+   */
+  warnings?: string[];
 }
 
 // Configuration from environment variables
@@ -252,19 +258,32 @@ export class KubernetesClusterManager {
 
       // Install the Tailscale operator + API server proxy, so the cluster is
       // reachable over the tailnet by identity with no certs to distribute.
+      //
+      // This is a POST-cluster add-on: by now the cluster is fully built and
+      // working, and the likeliest failure (a missing tailnet ACL grant) is an
+      // external prerequisite. So its errors are caught here and recorded as a
+      // warning rather than allowed to reach the catch below, which would delete
+      // an otherwise healthy cluster.
+      const warnings: string[] = [];
       if (options.operator) {
-        if (!kubeconfigPath) {
-          throw new Error('cannot install Tailscale operator: kubeconfig was not retrieved');
-        }
-        const result = await installTailscaleOperator({
-          kubeconfigPath,
-          oauthClientId: options.operator.oauthClientId,
-          oauthClientSecret: options.operator.oauthClientSecret,
-          hostname: options.operator.hostname,
-          tailnet: options.operator.tailnet,
-        });
-        if (result.endpoint) {
-          console.log(`Cluster API reachable over Tailscale at ${result.endpoint}`);
+        try {
+          if (!kubeconfigPath) {
+            throw new Error('kubeconfig was not retrieved');
+          }
+          const result = await installTailscaleOperator({
+            kubeconfigPath,
+            oauthClientId: options.operator.oauthClientId,
+            oauthClientSecret: options.operator.oauthClientSecret,
+            hostname: options.operator.hostname,
+            tailnet: options.operator.tailnet,
+          });
+          if (result.endpoint) {
+            console.log(`Cluster API reachable over Tailscale at ${result.endpoint}`);
+          }
+        } catch (opError) {
+          const message = opError instanceof Error ? opError.message : String(opError);
+          console.error(`Tailscale operator install failed (cluster is still up): ${message}`);
+          warnings.push(`Tailscale operator install failed: ${message}`);
         }
       }
 
@@ -273,6 +292,7 @@ export class KubernetesClusterManager {
         name,
         status: 'running',
         nodes,
+        ...(warnings.length > 0 ? { warnings } : {}),
       };
 
     } catch (error) {

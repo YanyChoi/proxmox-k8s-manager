@@ -74,6 +74,7 @@ const CLOUD_INIT_TEMPLATE = path.join(
  */
 async function renderCloudInit(opts: {
   clusterCidr: string;
+  lanAddress: string;
   advertiseRoutes: string;
   authKey: string;
   hostname: string;
@@ -88,11 +89,41 @@ async function renderCloudInit(opts: {
 
   return template
     .replaceAll('__HOSTNAME__', opts.hostname)
+    .replaceAll('__LAN_ADDRESS__', opts.lanAddress)
     .replaceAll('__CLUSTER_CIDR__', opts.clusterCidr)
     .replaceAll('__API_PORT__', String(opts.apiPort))
     .replaceAll('__ADVERTISE_ROUTES__', opts.advertiseRoutes)
     .replaceAll('__TS_AUTHKEY__', opts.authKey)
     .replace('__HAPROXY_SERVERS__', haproxyServers);
+}
+
+/**
+ * Computes the network address for `address/prefix` (e.g. 10.100.0.1 /16 ->
+ * 10.100.0.0/16). Masks the full 32-bit address rather than assuming a /16
+ * shape, so a non-/16 ROUTER_LAN_PREFIX produces a correct NAT source range.
+ */
+function networkCidr(address: string, prefix: number): string {
+  const octets = address.split('.').map(Number);
+  if (
+    octets.length !== 4 ||
+    octets.some((o) => !Number.isInteger(o) || o < 0 || o > 255)
+  ) {
+    throw new Error(`invalid IPv4 address: ${address}`);
+  }
+  if (!Number.isInteger(prefix) || prefix < 0 || prefix > 32) {
+    throw new Error(`invalid prefix length: ${prefix}`);
+  }
+  const addr =
+    ((octets[0] << 24) | (octets[1] << 16) | (octets[2] << 8) | octets[3]) >>> 0;
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  const net = (addr & mask) >>> 0;
+  const netOctets = [
+    (net >>> 24) & 255,
+    (net >>> 16) & 255,
+    (net >>> 8) & 255,
+    net & 255,
+  ];
+  return `${netOctets.join('.')}/${prefix}`;
 }
 
 export class RouterManager {
@@ -117,9 +148,9 @@ export class RouterManager {
       throw new Error('router requires at least one control-plane IP for HAProxy');
     }
 
-    // The cluster CIDR is the LAN address's network -- reuse it for both the NAT
-    // rule and the advertised route default so they cannot drift apart.
-    const clusterCidr = `${lanAddress.split('.').slice(0, 2).join('.')}.0.0/${lanPrefix}`;
+    // The cluster CIDR is the LAN address's network -- reuse it for the NAT rule
+    // so it cannot drift from the addressing.
+    const clusterCidr = networkCidr(lanAddress, lanPrefix);
 
     console.log(`Creating router ${name} (VMID: ${vmid}) at ${lanAddress}...`);
     const cloneTask = await this.client.cloneVM(options.templateVmid, vmid, name);
@@ -130,6 +161,7 @@ export class RouterManager {
     // regenerates SSH host keys.
     const userData = await renderCloudInit({
       clusterCidr,
+      lanAddress,
       advertiseRoutes,
       authKey: options.tailscaleAuthKey,
       hostname: name,

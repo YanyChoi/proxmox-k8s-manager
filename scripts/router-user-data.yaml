@@ -10,26 +10,37 @@
 #   3. tailscale up (subnet router + SSH)       -> tailnet reachability + admin
 #
 # Tokens (each wrapped in double underscores, substituted by router.ts):
-#   HOSTNAME, CLUSTER_CIDR, API_PORT, ADVERTISE_ROUTES, TS_AUTHKEY, HAPROXY_SERVERS
+#   HOSTNAME, LAN_ADDRESS, CLUSTER_CIDR, API_PORT, ADVERTISE_ROUTES,
+#   TS_AUTHKEY, HAPROXY_SERVERS
 hostname: __HOSTNAME__
 package_update: true
 packages:
   - haproxy
   - nftables
 write_files:
+  # ip_nonlocal_bind lets HAProxy bind __LAN_ADDRESS__ even if it (re)starts
+  # before the LAN NIC is fully up -- otherwise a boot-time race leaves the API
+  # LB dead until a manual restart.
   - path: /etc/sysctl.d/99-router.conf
     content: |
       net.ipv4.ip_forward=1
       net.ipv6.conf.all.forwarding=1
+      net.ipv4.ip_nonlocal_bind=1
   # Keyed on source/dest CIDR rather than the WAN interface name, so it survives
   # cloud-image NIC renaming (ens18/enp*). Loaded by nftables.service at boot.
+  #
+  # Uses a DEDICATED table with an ensure-then-delete-then-create idiom instead
+  # of `flush ruleset`: a global flush would wipe the tables tailscaled installs
+  # on every `systemctl restart nftables`. The bare `table ip k8snat` guarantees
+  # the table exists so the following `delete` never errors on a clean boot.
   - path: /etc/nftables.conf
     permissions: '0755'
     content: |
       #!/usr/sbin/nft -f
-      flush ruleset
+      table ip k8snat
+      delete table ip k8snat
 
-      table ip nat {
+      table ip k8snat {
           chain postrouting {
               type nat hook postrouting priority srcnat; policy accept;
               ip saddr __CLUSTER_CIDR__ ip daddr != __CLUSTER_CIDR__ masquerade
@@ -54,7 +65,7 @@ write_files:
           timeout server 30m
 
       frontend k8s-apiserver
-          bind *:__API_PORT__
+          bind __LAN_ADDRESS__:__API_PORT__
           default_backend k8s-control-plane
 
       backend k8s-control-plane
