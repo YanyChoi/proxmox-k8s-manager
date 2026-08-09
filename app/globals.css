@@ -68,6 +68,12 @@
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+  /* Metrics charts: validated dataviz palette (slots 1/2 pass CVD; blue↔orange
+     adjacent ΔE 9.1) plus chart chrome. Light-mode values. */
+  --metric-series-1: #2a78d6;
+  --metric-series-2: #eb6834;
+  --metric-grid: #e1e0d9;
+  --metric-axis: #898781;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -102,6 +108,11 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
+  /* Metrics charts: same two hues stepped for the dark surface + dark chrome. */
+  --metric-series-1: #3987e5;
+  --metric-series-2: #d95926;
+  --metric-grid: #2c2c2a;
+  --metric-axis: #898781;
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
