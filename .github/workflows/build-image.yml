@@ -1,0 +1,74 @@
+name: Build image
+
+on:
+  push:
+    branches: [main]
+    # Docs and cluster manifests are not in the image, so they cannot change it.
+    paths-ignore:
+      - '**.md'
+      - 'manifests/**'
+      - '.github/**'
+      - '!.github/workflows/build-image.yml'
+  workflow_dispatch:
+
+# A newer commit supersedes an in-flight build of the same ref.
+concurrency:
+  group: build-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Lets GITHUB_TOKEN push to GHCR -- no PAT needed. Requires the package's
+      # "Manage Actions access" to include this repo with the Write role.
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Derive tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # metadata-action lowercases the image name; GHCR rejects uppercase,
+          # and the owner here is "YanyChoi".
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=sha,format=long
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # amd64 only: this runs on the Proxmox host. Multi-arch would need
+          # QEMU emulation and roughly doubles build time for no benefit here.
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # KUBESPRAY_VERSION intentionally not passed -- the Dockerfile's ARG
+          # default is the single source of truth, so the two cannot drift.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          {
+            echo "### Image pushed"
+            echo
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
