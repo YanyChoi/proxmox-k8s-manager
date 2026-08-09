@@ -5,6 +5,8 @@ import type {
   ProxmoxTaskResponse,
   ProxmoxTaskStatus,
   ProxmoxVMStatus,
+  ProxmoxRrdSample,
+  RrdTimeframe,
 } from '../types/proxmox';
 
 export class ProxmoxAPIClient implements ProxmoxClient {
@@ -128,6 +130,22 @@ export class ProxmoxAPIClient implements ProxmoxClient {
       `/nodes/${this.node}/qemu/${vmid}/status/current`,
       'GET'
     );
+  }
+
+  /**
+   * Time-series metrics from Proxmox's per-VM RRD. `timeframe` sets the window
+   * and resolution (hour ~= per-minute); `cf` picks the consolidation function.
+   */
+  async getVMRrdData(
+    vmid: number,
+    timeframe: RrdTimeframe = 'hour',
+    cf: 'AVERAGE' | 'MAX' = 'AVERAGE'
+  ): Promise<ProxmoxRrdSample[]> {
+    const response = await this.request<{ data: ProxmoxRrdSample[] }>(
+      `/nodes/${this.node}/qemu/${vmid}/rrddata?timeframe=${timeframe}&cf=${cf}`,
+      'GET'
+    );
+    return response.data;
   }
 
   async getVMInterfaces(vmid: number): Promise<any> {
