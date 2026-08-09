@@ -1,0 +1,72 @@
+#cloud-config
+# Cloud-init user-data for the gateway/router VM. This is a TEMPLATE: it is
+# rendered by lib/api/router.ts (RouterManager.createRouter), which substitutes
+# the placeholder tokens below before uploading it as a Proxmox snippet and
+# attaching it via `cicustom`. It is not valid cloud-config until rendered.
+#
+# On first boot it turns a stock cloned Ubuntu VM into the cluster's router:
+#   1. IP forwarding + nftables masquerade NAT  -> cluster egress
+#   2. HAProxy on :__API_PORT__                 -> TCP LB in front of the control plane
+#   3. tailscale up (subnet router + SSH)       -> tailnet reachability + admin
+#
+# Tokens (each wrapped in double underscores, substituted by router.ts):
+#   HOSTNAME, CLUSTER_CIDR, API_PORT, ADVERTISE_ROUTES, TS_AUTHKEY, HAPROXY_SERVERS
+hostname: __HOSTNAME__
+package_update: true
+packages:
+  - haproxy
+  - nftables
+write_files:
+  - path: /etc/sysctl.d/99-router.conf
+    content: |
+      net.ipv4.ip_forward=1
+      net.ipv6.conf.all.forwarding=1
+  # Keyed on source/dest CIDR rather than the WAN interface name, so it survives
+  # cloud-image NIC renaming (ens18/enp*). Loaded by nftables.service at boot.
+  - path: /etc/nftables.conf
+    permissions: '0755'
+    content: |
+      #!/usr/sbin/nft -f
+      flush ruleset
+
+      table ip nat {
+          chain postrouting {
+              type nat hook postrouting priority srcnat; policy accept;
+              ip saddr __CLUSTER_CIDR__ ip daddr != __CLUSTER_CIDR__ masquerade
+          }
+      }
+  # TCP mode: `tcp-check` is a bare connect probe -- the apiserver's /healthz
+  # needs auth, and a TCP connect is enough to route around a dead node.
+  # Backends that don't exist yet (nodes boot after the router) show DOWN until
+  # they come up; the frontend still binds.
+  - path: /etc/haproxy/haproxy.cfg
+    content: |
+      global
+          log /dev/log local0
+          maxconn 4096
+
+      defaults
+          mode tcp
+          log global
+          option tcplog
+          timeout connect 5s
+          timeout client 30m
+          timeout server 30m
+
+      frontend k8s-apiserver
+          bind *:__API_PORT__
+          default_backend k8s-control-plane
+
+      backend k8s-control-plane
+          balance roundrobin
+          option tcp-check
+__HAPROXY_SERVERS__
+runcmd:
+  - sysctl --system
+  - systemctl enable --now nftables
+  - systemctl restart haproxy
+  - systemctl enable haproxy
+  - curl -fsSL https://tailscale.com/install.sh | sh
+  # Idempotent: re-runs cleanly if cloud-init retries. --accept-dns=false keeps
+  # the router on its own resolver instead of MagicDNS (unreachable by nodes).
+  - tailscale up --authkey=__TS_AUTHKEY__ --advertise-routes=__ADVERTISE_ROUTES__ --accept-dns=false --ssh --hostname=__HOSTNAME__

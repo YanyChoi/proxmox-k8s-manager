@@ -1,7 +1,8 @@
 import { ProxmoxAPIClient } from './proxmox-client';
 import { routerConfig } from '../config/proxmox';
 import { Socket } from 'net';
-import * as yaml from 'yaml';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 /**
  * Provisions the gateway/router VM the rest of the cluster depends on. It sits on
@@ -51,105 +52,47 @@ export interface RouterResult {
 }
 
 /**
- * Builds HAProxy in TCP mode fronting the control plane. `tcp-check` probes the
- * TLS port rather than doing an HTTP health check -- the apiserver's /healthz
- * needs auth, and a bare TCP connect is enough to route around a dead node.
- * Backends that don't exist yet (nodes are created after the router) simply show
- * DOWN until they boot; the frontend still binds.
+ * Path to the cloud-init template. Read at runtime (not bundled), so the
+ * Dockerfile's `COPY scripts` makes it available in the image and the mgmt VM
+ * finds it under the repo root -- same convention k8s-cluster.ts uses for the
+ * Kubespray group_vars templates.
  */
-function haproxyConfig(masterIps: string[], apiPort: number): string {
-  const servers = masterIps
-    .map((ip, i) => `    server master-${i + 1} ${ip}:${apiPort} check`)
-    .join('\n');
-  return `global
-    log /dev/log local0
-    maxconn 4096
-
-defaults
-    mode tcp
-    log global
-    option tcplog
-    timeout connect 5s
-    timeout client 30m
-    timeout server 30m
-
-frontend k8s-apiserver
-    bind *:${apiPort}
-    default_backend k8s-control-plane
-
-backend k8s-control-plane
-    balance roundrobin
-    option tcp-check
-${servers}
-`;
-}
+const CLOUD_INIT_TEMPLATE = path.join(
+  process.cwd(),
+  'scripts',
+  'router-user-data.yaml'
+);
 
 /**
- * nftables masquerade for anything leaving the cluster CIDR. Keyed on source/dest
- * rather than the WAN interface name so it survives cloud-image NIC renaming
- * (ens18/enp*). Loaded by nftables.service at boot, so it persists across reboots.
+ * Renders scripts/router-user-data.yaml into a concrete #cloud-config. The
+ * template is the single source of truth for what runs on the router; this only
+ * substitutes the dynamic values (control-plane IPs, cluster CIDR, auth key).
+ *
+ * The HAProxy backend server list is variable-length, so its placeholder is
+ * emitted with the exact indentation of the surrounding block scalar (6 spaces
+ * for the literal block + 4 for HAProxy's own indent) to keep the YAML valid.
  */
-function nftablesConfig(clusterCidr: string): string {
-  return `#!/usr/sbin/nft -f
-flush ruleset
-
-table ip nat {
-    chain postrouting {
-        type nat hook postrouting priority srcnat; policy accept;
-        ip saddr ${clusterCidr} ip daddr != ${clusterCidr} masquerade
-    }
-}
-`;
-}
-
-/**
- * Assembles the #cloud-config. Files are written first (cloud-init `write_files`
- * runs before `runcmd`), then packages install, then runcmd enables forwarding,
- * loads nftables, starts HAProxy, and brings up Tailscale as a subnet router
- * with SSH. `--accept-dns=false` keeps the router on its own resolver instead of
- * MagicDNS, which the cluster nodes cannot reach.
- */
-function buildCloudInit(opts: {
+async function renderCloudInit(opts: {
   clusterCidr: string;
   advertiseRoutes: string;
   authKey: string;
   hostname: string;
   masterIps: string[];
   apiPort: number;
-}): string {
-  const config = {
-    hostname: opts.hostname,
-    package_update: true,
-    packages: ['haproxy', 'nftables'],
-    write_files: [
-      {
-        path: '/etc/sysctl.d/99-router.conf',
-        content: 'net.ipv4.ip_forward=1\nnet.ipv6.conf.all.forwarding=1\n',
-      },
-      {
-        path: '/etc/nftables.conf',
-        permissions: '0755',
-        content: nftablesConfig(opts.clusterCidr),
-      },
-      {
-        path: '/etc/haproxy/haproxy.cfg',
-        content: haproxyConfig(opts.masterIps, opts.apiPort),
-      },
-    ],
-    runcmd: [
-      'sysctl --system',
-      'systemctl enable --now nftables',
-      'systemctl restart haproxy',
-      'systemctl enable haproxy',
-      'curl -fsSL https://tailscale.com/install.sh | sh',
-      // Idempotent: `tailscale up` re-runs cleanly if cloud-init retries.
-      `tailscale up --authkey=${opts.authKey} ` +
-        `--advertise-routes=${opts.advertiseRoutes} ` +
-        `--accept-dns=false --ssh --hostname=${opts.hostname}`,
-    ],
-  };
+}): Promise<string> {
+  const template = await fs.readFile(CLOUD_INIT_TEMPLATE, 'utf-8');
 
-  return '#cloud-config\n' + yaml.stringify(config);
+  const haproxyServers = opts.masterIps
+    .map((ip, i) => `          server master-${i + 1} ${ip}:${opts.apiPort} check`)
+    .join('\n');
+
+  return template
+    .replaceAll('__HOSTNAME__', opts.hostname)
+    .replaceAll('__CLUSTER_CIDR__', opts.clusterCidr)
+    .replaceAll('__API_PORT__', String(opts.apiPort))
+    .replaceAll('__ADVERTISE_ROUTES__', opts.advertiseRoutes)
+    .replaceAll('__TS_AUTHKEY__', opts.authKey)
+    .replace('__HAPROXY_SERVERS__', haproxyServers);
 }
 
 export class RouterManager {
@@ -185,7 +128,7 @@ export class RouterManager {
     // Upload the cloud-init user-data snippet, then point the VM at it. Done
     // before first boot: changing cloud-init after boot re-runs it and
     // regenerates SSH host keys.
-    const userData = buildCloudInit({
+    const userData = await renderCloudInit({
       clusterCidr,
       advertiseRoutes,
       authKey: options.tailscaleAuthKey,
