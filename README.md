@@ -68,6 +68,26 @@ SSH_PRIVATE_KEY=<base64-encoded-private-key>
 # Kubespray Configuration (for cluster creation)
 KUBESPRAY_PATH=/opt/kubespray
 KUBESPRAY_INVENTORY_DIR=/tmp/kubespray-inventories
+
+# --- Tailscale integration (optional; each add-on activates when its creds are set) ---
+# Router VM (NAT + HAProxy :6443 + Tailscale subnet router). Set the auth key to
+# have create-cluster provision a fresh gateway VM before the nodes.
+TAILSCALE_AUTHKEY=tskey-auth-...   # prefer an EPHEMERAL / single-use key (see note below)
+ROUTER_VMID=101              # must be an UNUSED id -- a live router is never adopted
+# NOTE: ROUTER_LAN_ADDRESS defaults to 10.100.0.1 -- the address a live router
+# already holds. Running this against an existing stack puts two hosts on the
+# gateway IP and breaks cluster networking. The IP collides, not just the VMID.
+ROUTER_WAN_BRIDGE=vmbr0     # egress / default route (DHCP)
+ROUTER_LAN_BRIDGE=vmbr1     # cluster L2; router owns 10.100.0.1
+# ROUTER_LAN_ADDRESS, ROUTER_LAN_PREFIX, ROUTER_ADVERTISE_ROUTES, ROUTER_MEMORY_MB,
+# ROUTER_CORES also override the defaults in lib/config/proxmox.ts.
+
+# In-cluster Tailscale operator + API server proxy. Set both to have it installed
+# after Kubespray. Reuse the OAuth client created for the operator.
+TS_OAUTH_CLIENT_ID=...
+TS_OAUTH_CLIENT_SECRET=...
+TS_OPERATOR_HOSTNAME=tailscale-operator
+TS_TAILNET=example.ts.net   # optional; only used to print the API proxy URL
 ```
 
 To encode your SSH private key in base64:
@@ -218,10 +238,35 @@ The app will automatically use `ansible-playbook` from the `venv/bin/` directory
 4. Converts VM to template
 
 ### Cluster Creation
-1. Clones VMs from selected template (master + worker nodes)
-2. Starts VMs and waits for IP addresses via QEMU guest agent
-3. Generates Kubespray inventory locally
-4. Runs `ansible-playbook` to deploy Kubernetes
+1. (Optional) Provisions a fresh **router VM** from cloud-init when `TAILSCALE_AUTHKEY`
+   is set: two NICs (WAN DHCP + cluster LAN gateway), NAT via nftables, HAProxy on
+   `:6443` in front of the control plane, and `tailscale up` as a subnet router with
+   SSH. Created **before** the nodes, since it owns their gateway address.
+2. Clones VMs from selected template (master + worker nodes)
+3. Starts VMs and waits for each to accept SSH (addresses are assigned statically,
+   so no QEMU-guest-agent dependency)
+4. Generates Kubespray inventory locally
+5. Runs `ansible-playbook` to deploy Kubernetes
+6. Retrieves the kubeconfig (already pointed at the HAProxy VIP)
+7. (Optional) Installs the **Tailscale operator** with the API server proxy when
+   `TS_OAUTH_CLIENT_ID`/`TS_OAUTH_CLIENT_SECRET` are set, so the cluster is reachable
+   over the tailnet by identity (`tailscale configure kubeconfig <hostname>`), no
+   certs to distribute.
+
+### Tailscale prerequisites
+
+The two integrations authenticate differently and each needs a one-time tailnet setup:
+
+- **Router (subnet router)** — a tagged auth key (`TAILSCALE_AUTHKEY`). In the
+  tailnet policy, add a `tagOwners` entry for its tag and an **autoApprover** for the
+  advertised route (e.g. `10.100.0.0/16`), or the route stays pending and nothing routes.
+  Prefer an **ephemeral / single-use** key: the rendered cloud-init snippet is deleted
+  from the Proxmox host after the router boots, but the key still lands in the guest's
+  cloud-init logs, so a single-use key means any residual copy is already spent.
+- **Operator (API server proxy)** — an OAuth client with `Devices Core` + `Auth Keys`
+  write, tagged `tag:k8s-operator`; plus `tagOwners` for `tag:k8s-operator`/`tag:k8s`
+  and a `grants` rule mapping your users to a Kubernetes group via
+  `tailscale.com/cap/kubernetes` (impersonation). See the Tailscale operator docs.
 
 ## Next Steps
 

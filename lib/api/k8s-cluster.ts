@@ -1,10 +1,11 @@
 import { ProxmoxAPIClient } from './proxmox-client';
+import { createRouterManager, RouterResult } from './router';
+import { createTailscaleOperatorManager } from './tailscale-operator';
+import { waitForPort } from './net';
 import { spawn } from 'child_process';
-import { Socket } from 'net';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as path from 'path';
-import * as os from 'os';
 
 export interface ClusterNode {
   vmid: number;
@@ -31,6 +32,33 @@ export interface ClusterOptions {
    */
   masterVmidBase?: number;
   workerVmidBase?: number;
+  /**
+   * When set, provision a fresh gateway/router VM (NAT + HAProxy + Tailscale
+   * subnet router) BEFORE the nodes -- it owns their gateway address. This
+   * always creates a new VM; point `vmid` at an unused id so a live router is
+   * left alone.
+   */
+  router?: RouterProvisionOptions;
+  /**
+   * When set, install the Tailscale operator (with the API server proxy) into
+   * the cluster after Kubespray finishes and the kubeconfig is retrieved.
+   */
+  operator?: OperatorProvisionOptions;
+}
+
+export interface RouterProvisionOptions {
+  /** Auth key the router uses to join the tailnet (tagged, reusable). */
+  authKey: string;
+  vmid?: number;
+  wanBridge?: string;
+  lanBridge?: string;
+}
+
+export interface OperatorProvisionOptions {
+  oauthClientId: string;
+  oauthClientSecret: string;
+  hostname?: string;
+  tailnet?: string;
 }
 
 /**
@@ -80,6 +108,12 @@ export interface ClusterStatus {
   status: 'creating' | 'provisioning' | 'running' | 'failed';
   nodes: ClusterNode[];
   error?: string;
+  /**
+   * Non-fatal problems from post-cluster add-ons (e.g. the Tailscale operator).
+   * The cluster is up and usable; these are surfaced so a failed add-on doesn't
+   * masquerade as success but also doesn't roll back a working cluster.
+   */
+  warnings?: string[];
 }
 
 // Configuration from environment variables
@@ -119,8 +153,30 @@ export class KubernetesClusterManager {
     // Sequential allocation is only used when role bases are not given.
     let currentVmid = options.startVmid || await this.client.getNextVMID();
     const { masterVmidBase, workerVmidBase } = options;
+    let router: RouterResult | undefined;
 
     try {
+      // The router is the nodes' gateway, so it must exist and be routing before
+      // any node boots. Its HAProxy backend is the (deterministic) set of
+      // control-plane addresses, which we can derive before cloning anything.
+      if (options.router) {
+        const masterIps = Array.from({ length: masterCount }, (_, i) =>
+          this.nodeIp(netCfg, 'master', i)
+        );
+        const routerManager = createRouterManager(this.client);
+        router = await routerManager.createRouter({
+          templateVmid,
+          tailscaleAuthKey: options.router.authKey,
+          masterIps,
+          vmid: options.router.vmid,
+          wanBridge: options.router.wanBridge,
+          lanBridge: netCfg.bridge,
+          lanAddress: netCfg.gateway,
+          lanPrefix: netCfg.prefixLength,
+          nameserver: netCfg.nameserver,
+        });
+      }
+
       const planned = [
         ...Array.from({ length: masterCount }, (_, i) => ({ role: 'master' as const, index: i })),
         ...Array.from({ length: workerCount }, (_, i) => ({ role: 'worker' as const, index: i })),
@@ -165,7 +221,7 @@ export class KubernetesClusterManager {
       // know each node is accepting SSH before handing over to Ansible.
       console.log('Waiting for nodes to accept SSH...');
       for (const node of nodes) {
-        const ready = await this.waitForPort(node.ip!, 22, 300000);
+        const ready = await waitForPort(node.ip!, 22, 300000);
         if (!ready) {
           throw new Error(`${node.name} (${node.ip}) did not accept SSH within 5 minutes`);
         }
@@ -180,9 +236,12 @@ export class KubernetesClusterManager {
       console.log('Running Kubespray playbook...');
       await this.runKubespray(inventoryPath);
 
-      // Retrieve kubeconfig from master node
+      // Retrieve kubeconfig from master node. admin.conf already points at the
+      // HAProxy VIP (loadbalancer_apiserver in group_vars/all), so it is usable
+      // as-is from the mgmt VM -- including for the operator install below.
       console.log('Retrieving kubeconfig from master node...');
       const masterNode = nodes.find(n => n.role === 'master');
+      let kubeconfigPath: string | undefined;
       if (masterNode?.ip) {
         const kubeconfig = await this.retrieveKubeconfig(
           masterNode.ip,
@@ -190,9 +249,40 @@ export class KubernetesClusterManager {
           path.join(inventoryPath, 'ssh_key')
         );
         if (kubeconfig) {
-          const kubeconfigPath = path.join(inventoryPath, 'kubeconfig');
+          kubeconfigPath = path.join(inventoryPath, 'kubeconfig');
           await fs.writeFile(kubeconfigPath, kubeconfig);
           console.log(`Kubeconfig saved to ${kubeconfigPath}`);
+        }
+      }
+
+      // Install the Tailscale operator + API server proxy, so the cluster is
+      // reachable over the tailnet by identity with no certs to distribute.
+      //
+      // This is a POST-cluster add-on: by now the cluster is fully built and
+      // working, and the likeliest failure (a missing tailnet ACL grant) is an
+      // external prerequisite. So its errors are caught here and recorded as a
+      // warning rather than allowed to reach the catch below, which would delete
+      // an otherwise healthy cluster.
+      const warnings: string[] = [];
+      if (options.operator) {
+        try {
+          if (!kubeconfigPath) {
+            throw new Error('kubeconfig was not retrieved');
+          }
+          const result = await createTailscaleOperatorManager().install({
+            kubeconfigPath,
+            oauthClientId: options.operator.oauthClientId,
+            oauthClientSecret: options.operator.oauthClientSecret,
+            hostname: options.operator.hostname,
+            tailnet: options.operator.tailnet,
+          });
+          if (result.endpoint) {
+            console.log(`Cluster API reachable over Tailscale at ${result.endpoint}`);
+          }
+        } catch (opError) {
+          const message = opError instanceof Error ? opError.message : String(opError);
+          console.error(`Tailscale operator install failed (cluster is still up): ${message}`);
+          warnings.push(`Tailscale operator install failed: ${message}`);
         }
       }
 
@@ -201,6 +291,7 @@ export class KubernetesClusterManager {
         name,
         status: 'running',
         nodes,
+        ...(warnings.length > 0 ? { warnings } : {}),
       };
 
     } catch (error) {
@@ -210,6 +301,14 @@ export class KubernetesClusterManager {
       if (nodes.length > 0) {
         console.log('Cleaning up created nodes...');
         await this.deleteCluster(nodes);
+      }
+
+      // And the router, if this run created it. Only tear down a router we just
+      // built -- an existing one is never adopted, so `router` is only set when
+      // this run created a fresh VM.
+      if (router) {
+        console.log('Cleaning up created router...');
+        await this.deleteVM(router.vmid, router.name).catch(() => {});
       }
 
       return {
@@ -233,27 +332,6 @@ export class KubernetesClusterManager {
       throw new Error(`too many ${role} nodes: host octet ${host} exceeds 254`);
     }
     return `${prefix}.${host}`;
-  }
-
-  private async waitForPort(host: string, port: number, timeoutMs: number): Promise<boolean> {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      const open = await new Promise<boolean>((resolve) => {
-        const socket = new Socket();
-        const done = (result: boolean) => {
-          socket.destroy();
-          resolve(result);
-        };
-        socket.setTimeout(3000);
-        socket.once('connect', () => done(true));
-        socket.once('timeout', () => done(false));
-        socket.once('error', () => done(false));
-        socket.connect(port, host);
-      });
-      if (open) return true;
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    }
-    return false;
   }
 
   private async prepareInventory(
@@ -523,21 +601,24 @@ export class KubernetesClusterManager {
   async deleteCluster(nodes: ClusterNode[]): Promise<void> {
     console.log('Deleting cluster nodes...');
     for (const node of nodes) {
-      try {
-        // Stop VM first
-        console.log(`Stopping ${node.name}...`);
-        const stopTaskId = await this.client.stopVM(node.vmid);
-        await this.client.waitForTask(stopTaskId).catch(() => {});
-
-        // Delete VM
-        console.log(`Deleting ${node.name}...`);
-        const deleteTaskId = await this.client.deleteVM(node.vmid);
-        await this.client.waitForTask(deleteTaskId);
-      } catch (error) {
-        console.error(`Failed to delete ${node.name}:`, error);
-      }
+      await this.deleteVM(node.vmid, node.name);
     }
     console.log('Cluster deleted.');
+  }
+
+  /** Stops (best-effort) then deletes a single VM. Never throws. */
+  private async deleteVM(vmid: number, name: string): Promise<void> {
+    try {
+      console.log(`Stopping ${name}...`);
+      const stopTaskId = await this.client.stopVM(vmid);
+      await this.client.waitForTask(stopTaskId).catch(() => {});
+
+      console.log(`Deleting ${name}...`);
+      const deleteTaskId = await this.client.deleteVM(vmid);
+      await this.client.waitForTask(deleteTaskId);
+    } catch (error) {
+      console.error(`Failed to delete ${name}:`, error);
+    }
   }
 }
 

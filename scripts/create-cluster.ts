@@ -10,12 +10,23 @@
  *
  * Overridable via env: CLUSTER_NAME, MASTER_COUNT, WORKER_COUNT,
  * MASTER_VMID_BASE, WORKER_VMID_BASE, SSH_KEY_PATH.
+ *
+ * Optional add-ons, each enabled by presence of its credentials:
+ *   - Router VM (NAT + HAProxy + Tailscale subnet router): set TAILSCALE_AUTHKEY.
+ *     Tuned via ROUTER_VMID, ROUTER_WAN_BRIDGE, ROUTER_LAN_BRIDGE (see config).
+ *   - Tailscale operator + API server proxy: set TS_OAUTH_CLIENT_ID and
+ *     TS_OAUTH_CLIENT_SECRET (and TS_TAILNET to print the endpoint).
  */
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { createProxmoxClient } from '../lib/api/proxmox-client';
 import { createKubernetesClusterManager } from '../lib/api/k8s-cluster';
+import { routerConfig, tailscaleConfig } from '../lib/config/proxmox';
+import type {
+  RouterProvisionOptions,
+  OperatorProvisionOptions,
+} from '../lib/api/k8s-cluster';
 
 const CLUSTER_NAME = process.env.CLUSTER_NAME ?? 'k8s';
 const MASTER_COUNT = Number(process.env.MASTER_COUNT ?? 3);
@@ -33,9 +44,27 @@ async function main(): Promise<void> {
   const client = createProxmoxClient();
   const manager = createKubernetesClusterManager(client);
 
+  // Enable each add-on only when its credentials are present, so the default
+  // path (no Tailscale env) still builds a plain cluster unchanged.
+  const router: RouterProvisionOptions | undefined = tailscaleConfig.authKey
+    ? { authKey: tailscaleConfig.authKey, vmid: routerConfig.vmid }
+    : undefined;
+
+  const operator: OperatorProvisionOptions | undefined =
+    tailscaleConfig.oauthClientId && tailscaleConfig.oauthClientSecret
+      ? {
+          oauthClientId: tailscaleConfig.oauthClientId,
+          oauthClientSecret: tailscaleConfig.oauthClientSecret,
+          hostname: tailscaleConfig.operatorHostname,
+          tailnet: tailscaleConfig.tailnet || undefined,
+        }
+      : undefined;
+
   console.log(
     `Creating cluster "${CLUSTER_NAME}": ` +
-      `${MASTER_COUNT} control plane + ${WORKER_COUNT} workers`
+      `${MASTER_COUNT} control plane + ${WORKER_COUNT} workers` +
+      (router ? ' + router' : '') +
+      (operator ? ' + tailscale-operator' : '')
   );
 
   const result = await manager.createCluster({
@@ -48,6 +77,8 @@ async function main(): Promise<void> {
     sshPrivateKey,
     sshUser: 'ubuntu',
     cni: 'cilium',
+    router,
+    operator,
   });
 
   console.log('\n=== result ===');
