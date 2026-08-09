@@ -3,9 +3,17 @@ name: Build image
 on:
   push:
     branches: [main]
+    # Release tags. A tag build is the artifact for a release, so it must run
+    # regardless of which files the tagged commit touched -- see the note on
+    # paths-ignore below.
+    tags: ['v*']
     # Docs and cluster manifests are not in the image, so they cannot change it.
     # Keep this list flat: `!` negation inside paths-ignore does not reliably
     # re-include a path, and silently produces zero runs when it misfires.
+    #
+    # NOTE: path filters apply to the whole push event, tags included. If a tag
+    # push is ever skipped because the tagged commit only touched docs, split
+    # tags into their own workflow file rather than adding negations here.
     paths-ignore:
       - '**.md'
       - 'manifests/**'
@@ -47,6 +55,10 @@ jobs:
           tags: |
             type=sha,format=long
             type=raw,value=latest,enable={{is_default_branch}}
+            # v0.2.0 -> "0.2.0" and "0.2", so consumers can pin either
+            # precisely or to a minor line.
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
 
       - name: Build and push
         uses: docker/build-push-action@v6
