@@ -4,11 +4,11 @@ on:
   push:
     branches: [main]
     # Docs and cluster manifests are not in the image, so they cannot change it.
+    # Keep this list flat: `!` negation inside paths-ignore does not reliably
+    # re-include a path, and silently produces zero runs when it misfires.
     paths-ignore:
       - '**.md'
       - 'manifests/**'
-      - '.github/**'
-      - '!.github/workflows/build-image.yml'
   workflow_dispatch:
 
 # A newer commit supersedes an in-flight build of the same ref.
